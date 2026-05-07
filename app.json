@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Gym80 Tracker",
+    "slug": "gym80-tracker",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}
