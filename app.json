@@ -4,6 +4,14 @@
     "slug": "gym80-tracker",
     "version": "0.1.0",
     "orientation": "portrait",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Povol aplikacii Gym80 Tracker pristup ku kamere, aby si mohol odfotit stroj vo fitku."
+        }
+      ]
+    ],
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
       "**/*"

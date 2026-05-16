@@ -1,15 +1,55 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
 import { SectionCard } from "../components/SectionCard";
-import { colors } from "../theme";
-import { Machine, WorkoutSession } from "../types";
+import { StatChip } from "../components/StatChip";
+import { AppColors, useTheme } from "../theme";
+import { Machine, WorkoutFeeling, WorkoutSession } from "../types";
+import { estimateSessionCalories } from "../utils/calories";
+import { triggerTapHaptic } from "../utils/haptics";
 
 type HistoryScreenProps = {
+  exportValue: string;
   sessions: WorkoutSession[];
   getMachine: (machineId: string) => Machine | undefined;
+  onClearHistory: () => void;
+  onDeleteEntry: (entryId: string) => void;
+  onImportHistory: (rawValue: string) => boolean;
 };
 
-export function HistoryScreen({ sessions, getMachine }: HistoryScreenProps) {
+export function HistoryScreen({
+  exportValue,
+  sessions,
+  getMachine,
+  onClearHistory,
+  onDeleteEntry,
+  onImportHistory
+}: HistoryScreenProps) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const [isExportOpen, setIsExportOpen] = React.useState(false);
+  const [isImportOpen, setIsImportOpen] = React.useState(false);
+  const [importText, setImportText] = React.useState("");
+  const [importError, setImportError] = React.useState("");
+  const totalEntries = sessions.reduce(
+    (count, session) => count + session.entries.length,
+    0
+  );
+  const totalCalories = sessions.reduce(
+    (sum, session) => sum + estimateSessionCalories(session, getMachine),
+    0
+  );
+  const latestTrainingLabel = sessions[0]
+    ? new Date(sessions[0].workoutDate).toLocaleDateString("sk-SK")
+    : "-";
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>Historia treningov</Text>
@@ -17,37 +57,229 @@ export function HistoryScreen({ sessions, getMachine }: HistoryScreenProps) {
         Prehlad po jednotlivych dnoch. Neskor sem vieme pridat filtre, grafy a export.
       </Text>
 
-      {sessions.map((session) => (
-        <SectionCard
-          key={session.id}
-          title={new Date(session.workoutDate).toLocaleDateString("sk-SK")}
-          subtitle={session.focus}
-        >
-          <Text style={styles.summary}>{session.coachSummary}</Text>
-          <View style={styles.entries}>
-            {session.entries.map((entry) => {
-              const machine = getMachine(entry.machineId);
+      <View style={styles.overviewGrid}>
+        <View style={styles.overviewCard}>
+          <Text style={styles.overviewLabel}>Treningy</Text>
+          <Text style={styles.overviewValue}>{sessions.length}</Text>
+        </View>
+        <View style={styles.overviewCard}>
+          <Text style={styles.overviewLabel}>Zapisy</Text>
+          <Text style={styles.overviewValue}>{totalEntries}</Text>
+        </View>
+        <View style={styles.overviewCard}>
+          <Text style={styles.overviewLabel}>Kcal</Text>
+          <Text style={styles.overviewValue}>~{totalCalories}</Text>
+        </View>
+      </View>
 
-              return (
-                <View key={entry.id} style={styles.entry}>
-                  <Text style={styles.entryTitle}>
-                    {machine?.modelName ?? entry.machineId}
-                  </Text>
-                  <Text style={styles.entryMeta}>
-                    {entry.weightKg} kg • {entry.sets} serie • {entry.reps} opakovani
-                  </Text>
-                  {entry.note ? <Text style={styles.entryNote}>{entry.note}</Text> : null}
-                </View>
-              );
-            })}
+      <View style={styles.latestCard}>
+        <Text style={styles.latestLabel}>Posledny trening</Text>
+        <Text style={styles.latestValue}>{latestTrainingLabel}</Text>
+      </View>
+
+      <View style={styles.backupRow}>
+        <Pressable
+          onPress={() => {
+            triggerTapHaptic();
+            setIsExportOpen(true);
+          }}
+          style={styles.backupButton}
+        >
+          <Text style={styles.backupButtonText}>Export historie</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            triggerTapHaptic();
+            setImportError("");
+            setIsImportOpen(true);
+          }}
+          style={styles.backupButton}
+        >
+          <Text style={styles.backupButtonText}>Import historie</Text>
+        </Pressable>
+      </View>
+
+      {sessions.length > 0 ? (
+        <Pressable
+          onPress={() => {
+            triggerTapHaptic();
+            onClearHistory();
+          }}
+          style={styles.clearButton}
+        >
+          <Text style={styles.clearButtonText}>Zmazat celu historiu</Text>
+        </Pressable>
+      ) : null}
+
+      {sessions.map((session) => {
+        const calories = estimateSessionCalories(session, getMachine);
+
+        return (
+          <SectionCard
+            key={session.id}
+            title={new Date(session.workoutDate).toLocaleDateString("sk-SK")}
+            subtitle={session.focus}
+          >
+            <View style={styles.sessionHeader}>
+              <View style={styles.focusBadge}>
+                <Text style={styles.focusBadgeText}>{session.focus}</Text>
+              </View>
+              <View style={styles.row}>
+                <StatChip label="Kcal" value={`~${calories}`} />
+                <StatChip label="Cviky" value={String(session.entries.length)} />
+              </View>
+            </View>
+            <Text style={styles.summary}>{session.coachSummary}</Text>
+            <View style={styles.entries}>
+              {session.entries.map((entry, entryIndex) => {
+                const machine = getMachine(entry.machineId);
+                const isCardio = machine?.muscleGroup === "Kardio";
+                const primaryMeta = isCardio
+                  ? `${entry.durationMin ?? 0} min`
+                  : `${entry.weightKg ?? 0} kg`;
+                const secondaryMeta = isCardio
+                  ? `${entry.speedKph ?? 0} km/h - sklon ${entry.inclinePercent ?? 0} %`
+                  : `${entry.sets ?? 0} serie - ${entry.reps ?? 0} opakovani`;
+
+                return (
+                  <View key={entry.id} style={styles.entry}>
+                    <View style={styles.entryNumber}>
+                      <Text style={styles.entryNumberText}>{entryIndex + 1}</Text>
+                    </View>
+                    <View style={styles.entryContent}>
+                      <View style={styles.entryHeader}>
+                        <Text style={styles.entryTitle}>
+                          {machine?.displayNameSk ?? entry.machineId}
+                        </Text>
+                        <Text style={styles.entryTime}>
+                          {new Date(entry.completedAt).toLocaleTimeString("sk-SK", {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </Text>
+                      </View>
+                      <View style={styles.entryMetaRow}>
+                        <View style={styles.entryPill}>
+                          <Text style={styles.entryPillText}>{primaryMeta}</Text>
+                        </View>
+                        <View style={styles.entryPillSoft}>
+                          <Text style={styles.entryPillSoftText}>{secondaryMeta}</Text>
+                        </View>
+                      </View>
+                      {entry.feeling ? (
+                        <Text style={styles.entryMeta}>
+                          Pocit: {translateFeeling(entry.feeling)}
+                        </Text>
+                      ) : null}
+                      {entry.note ? <Text style={styles.entryNote}>{entry.note}</Text> : null}
+                      <Pressable
+                        onPress={() => {
+                          triggerTapHaptic();
+                          onDeleteEntry(entry.id);
+                        }}
+                        style={styles.deleteButton}
+                      >
+                        <Text style={styles.deleteButtonText}>Zmazat zapis</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </SectionCard>
+        );
+      })}
+
+      <Modal
+        visible={isExportOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsExportOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Export historie</Text>
+            <Text style={styles.modalSubtitle}>
+              Skopiruj tento text a uloz si ho mimo appky.
+            </Text>
+            <TextInput
+              value={exportValue}
+              multiline
+              selectTextOnFocus
+              style={styles.backupInput}
+            />
+            <Pressable
+              onPress={() => setIsExportOpen(false)}
+              style={[styles.modalButton, styles.modalButtonSolo]}
+            >
+              <Text style={styles.modalButtonText}>Zavriet</Text>
+            </Pressable>
           </View>
-        </SectionCard>
-      ))}
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isImportOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsImportOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Import historie</Text>
+            <Text style={styles.modalSubtitle}>
+              Vloz sem predtym ulozeny export. Aktualna historia sa prepise.
+            </Text>
+            <TextInput
+              value={importText}
+              onChangeText={(value) => {
+                setImportText(value);
+                setImportError("");
+              }}
+              multiline
+              placeholder="Sem vloz JSON export historie"
+              placeholderTextColor={colors.textMuted}
+              style={styles.backupInput}
+            />
+            {importError ? <Text style={styles.importError}>{importError}</Text> : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setIsImportOpen(false)}
+                style={styles.modalButtonSecondary}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Zrusit</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (!importText.trim()) {
+                    setImportError("Najprv vloz export historie.");
+                    return;
+                  }
+
+                  const wasImported = onImportHistory(importText);
+
+                  if (wasImported) {
+                    setImportText("");
+                    setIsImportOpen(false);
+                    return;
+                  }
+
+                  setImportError("Import sa nepodaril. Skontroluj, ci je vlozeny cely text.");
+                }}
+                style={styles.modalButton}
+              >
+                <Text style={styles.modalButtonText}>Importovat</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColors) {
+  return StyleSheet.create({
   content: {
     padding: 20,
     gap: 16,
@@ -63,7 +295,100 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     color: colors.textMuted
   },
+  row: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap"
+  },
+  overviewGrid: {
+    flexDirection: "row",
+    gap: 10
+  },
+  overviewCard: {
+    flex: 1,
+    backgroundColor: colors.accent,
+    borderRadius: 18,
+    padding: 14
+  },
+  overviewLabel: {
+    color: colors.page,
+    fontSize: 12,
+    fontWeight: "700",
+    opacity: 0.82
+  },
+  overviewValue: {
+    marginTop: 6,
+    color: colors.page,
+    fontSize: 22,
+    fontWeight: "900"
+  },
+  latestCard: {
+    backgroundColor: colors.highlightSoft,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: colors.border
+  },
+  latestLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  latestValue: {
+    marginTop: 4,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: "900"
+  },
+  backupRow: {
+    flexDirection: "row",
+    gap: 10
+  },
+  backupButton: {
+    flex: 1,
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    alignItems: "center"
+  },
+  backupButtonText: {
+    color: colors.text,
+    fontWeight: "900",
+    fontSize: 13
+  },
+  clearButton: {
+    backgroundColor: colors.accent,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: "center"
+  },
+  clearButtonText: {
+    color: colors.page,
+    fontWeight: "800"
+  },
+  sessionHeader: {
+    gap: 12
+  },
+  focusBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.highlight,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7
+  },
+  focusBadgeText: {
+    color: "#fff8ee",
+    fontSize: 12,
+    fontWeight: "900"
+  },
   summary: {
+    marginTop: 14,
     fontSize: 14,
     lineHeight: 22,
     color: colors.text
@@ -73,14 +398,74 @@ const styles = StyleSheet.create({
     gap: 12
   },
   entry: {
-    backgroundColor: "#fff4de",
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: colors.accentSoft,
     borderRadius: 18,
-    padding: 14
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border
+  },
+  entryNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.highlight
+  },
+  entryNumberText: {
+    color: "#fff8ee",
+    fontWeight: "900"
+  },
+  entryContent: {
+    flex: 1
+  },
+  entryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10
   },
   entryTitle: {
+    flex: 1,
     fontSize: 15,
     fontWeight: "700",
     color: colors.text
+  },
+  entryTime: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.textMuted
+  },
+  entryMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10
+  },
+  entryPill: {
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7
+  },
+  entryPillText: {
+    color: colors.page,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  entryPillSoft: {
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: colors.border
+  },
+  entryPillSoftText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "800"
   },
   entryMeta: {
     marginTop: 4,
@@ -92,5 +477,114 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: colors.text
+  },
+  deleteButton: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    backgroundColor: colors.highlightSoft,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 9
+  },
+  deleteButtonText: {
+    color: colors.highlight,
+    fontWeight: "800"
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.62)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18
+  },
+  modalCard: {
+    width: "100%",
+    maxHeight: "86%",
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: colors.text
+  },
+  modalSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textMuted
+  },
+  backupInput: {
+    marginTop: 14,
+    minHeight: 240,
+    maxHeight: 360,
+    textAlignVertical: "top",
+    backgroundColor: colors.inputSurface,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 18
+  },
+  importError: {
+    marginTop: 10,
+    color: colors.highlight,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  modalActions: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 10
+  },
+  modalButton: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: colors.highlight,
+    borderRadius: 16,
+    paddingVertical: 13
+  },
+  modalButtonText: {
+    color: "#fff8ee",
+    fontWeight: "900"
+  },
+  modalButtonSolo: {
+    marginTop: 14
+  },
+  modalButtonSecondary: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 13
+  },
+  modalButtonSecondaryText: {
+    color: colors.text,
+    fontWeight: "900"
   }
-});
+  });
+}
+
+function translateFeeling(feeling: WorkoutFeeling) {
+  if (feeling === "lahke") {
+    return "lahke";
+  }
+
+  if (feeling === "akurat") {
+    return "akurat";
+  }
+
+  if (feeling === "tazke") {
+    return "tazke";
+  }
+
+  return "bolest";
+}

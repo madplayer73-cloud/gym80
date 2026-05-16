@@ -4,6 +4,9 @@ import { buildDailySuggestion } from "../utils/trainingPlan";
 export type CoachRecommendation = {
   headline: string;
   summary: string;
+  warmup: string[];
+  cooldown: string[];
+  coachNote: string;
   machineIds: string[];
 };
 
@@ -16,6 +19,9 @@ export async function getCoachRecommendation(
   return {
     headline: suggestion.title,
     summary: suggestion.explanation,
+    warmup: suggestion.warmup,
+    cooldown: suggestion.cooldown,
+    coachNote: suggestion.coachNote,
     machineIds: suggestion.highlightedMachines.map((machine) => machine.id)
   };
 }

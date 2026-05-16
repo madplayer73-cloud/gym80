@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors } from "../theme";
+import { AppColors, useTheme } from "../theme";
 
 type StatChipProps = {
   label: string;
@@ -8,6 +8,9 @@ type StatChipProps = {
 };
 
 export function StatChip({ label, value }: StatChipProps) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.chip}>
       <Text style={styles.label}>{label}</Text>
@@ -16,11 +19,12 @@ export function StatChip({ label, value }: StatChipProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColors) {
+  return StyleSheet.create({
   chip: {
     flex: 1,
     minWidth: 88,
-    backgroundColor: "#f0e2cb",
+    backgroundColor: colors.accentSoft,
     borderRadius: 18,
     paddingHorizontal: 12,
     paddingVertical: 10
@@ -35,4 +39,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.text
   }
-});
+  });
+}

@@ -1,7 +1,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppTab } from "../types";
-import { colors } from "../theme";
+import { AppColors, useTheme } from "../theme";
+import { triggerTapHaptic } from "../utils/haptics";
 
 type BottomNavProps = {
   activeTab: AppTab;
@@ -15,6 +16,9 @@ const items: Array<{ label: string; tab: AppTab }> = [
 ];
 
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.wrapper}>
       {items.map((item) => {
@@ -23,7 +27,10 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
         return (
           <Pressable
             key={item.tab}
-            onPress={() => onChange(item.tab)}
+            onPress={() => {
+              triggerTapHaptic();
+              onChange(item.tab);
+            }}
             style={[styles.item, isActive ? styles.itemActive : null]}
           >
             <Text style={[styles.label, isActive ? styles.labelActive : null]}>
@@ -36,16 +43,20 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColors) {
+  return StyleSheet.create({
   wrapper: {
     flexDirection: "row",
     gap: 10,
+    marginHorizontal: 14,
+    marginBottom: 12,
     paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: 16,
-    backgroundColor: colors.page,
-    borderTopWidth: 1,
-    borderTopColor: colors.border
+    paddingBottom: 22,
+    backgroundColor: colors.accentDeep,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 24
   },
   item: {
     flex: 1,
@@ -53,17 +64,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 18,
     paddingVertical: 14,
-    backgroundColor: colors.surface
+    backgroundColor: colors.surfaceStrong
   },
   itemActive: {
-    backgroundColor: colors.accent
+    backgroundColor: colors.highlight
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.textMuted
+    color: colors.text
   },
   labelActive: {
     color: "#fff8ee"
   }
-});
+  });
+}

@@ -1,6 +1,6 @@
 import React, { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors } from "../theme";
+import { AppColors, useTheme } from "../theme";
 
 type SectionCardProps = {
   title: string;
@@ -9,6 +9,9 @@ type SectionCardProps = {
 };
 
 export function SectionCard({ title, subtitle, children }: SectionCardProps) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{title}</Text>
@@ -18,7 +21,8 @@ export function SectionCard({ title, subtitle, children }: SectionCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: 24,
@@ -45,4 +49,5 @@ const styles = StyleSheet.create({
   content: {
     marginTop: 16
   }
-});
+  });
+}
