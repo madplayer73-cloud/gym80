@@ -24,6 +24,15 @@ export type AppTab =
 
 export type WorkoutFeeling = "lahke" | "akurat" | "tazke" | "bolest";
 
+export type ExerciseType =
+  | "compound"
+  | "isolation"
+  | "core"
+  | "cardio"
+  | "mobility";
+
+export type ExerciseDifficulty = "easy" | "medium" | "hard";
+
 export type Machine = {
   id: string;
   brand: "Gym80" | "Volne vahy";
@@ -35,6 +44,13 @@ export type Machine = {
   descriptionSk: string;
   imageAsset?: string;
   setupNoteLabel?: string;
+  subgroup?: string;
+  exerciseType?: ExerciseType;
+  difficulty?: ExerciseDifficulty;
+  estimatedTimeMinutes?: number;
+  goal?: "hypertrophy";
+  recommendedRestMinSec?: number;
+  recommendedRestMaxSec?: number;
 };
 
 export type WorkoutEntry = {
@@ -46,6 +62,7 @@ export type WorkoutEntry = {
   durationMin?: number;
   speedKph?: number;
   inclinePercent?: number;
+  restSeconds?: number;
   feeling?: WorkoutFeeling;
   note?: string;
   completedAt: string;

@@ -13,6 +13,7 @@ import { AppColors, useTheme } from "../theme";
 import { Machine, WorkoutSession } from "../types";
 import { estimateSessionCalories } from "../utils/calories";
 import { triggerTapHaptic } from "../utils/haptics";
+import { generateTrainerPlan, PlannedExercise } from "../utils/trainerPlanner";
 import { buildDailySuggestion } from "../utils/trainingPlan";
 
 type HomeScreenProps = {
@@ -42,7 +43,16 @@ export function HomeScreen({
     warmupMin,
     cooldownMin
   );
+  const trainerPlan = generateTrainerPlan({
+    sessions,
+    machines,
+    targetDurationMinutes: durationMin,
+    warmupMin,
+    cooldownMin,
+    preferredFocus: suggestion.focus
+  });
   const lastSession = sessions[0];
+  const [expandedWhyId, setExpandedWhyId] = React.useState<string | null>(null);
   const machineMap = React.useMemo(
     () => new Map(machines.map((machine) => [machine.id, machine])),
     [machines]
@@ -50,7 +60,6 @@ export function HomeScreen({
   const lastSessionCalories = lastSession
     ? estimateSessionCalories(lastSession, (machineId) => machineMap.get(machineId))
     : null;
-  const suggestedCount = durationMin >= 120 ? 7 : durationMin >= 90 ? 5 : 3;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -150,7 +159,8 @@ export function HomeScreen({
         <View style={styles.row}>
           <StatChip label="Cas" value={`${suggestion.durationMin} min`} />
           <StatChip label="Rozcvicka" value={`${suggestion.warmupMin} min`} />
-          <StatChip label="Hlavna cast" value={`${suggestion.mainWorkoutMin} min`} />
+          <StatChip label="Plan" value={`${trainerPlan.estimatedDurationMinutes} min`} />
+          <StatChip label="Cviky" value={String(trainerPlan.exercises.length)} />
           <StatChip label="Schladenie" value={`${suggestion.cooldownMin} min`} />
           <StatChip label="Kcal" value={`~${suggestion.estimatedCalories}`} />
         </View>
@@ -164,6 +174,26 @@ export function HomeScreen({
           </Text>
         </View>
         <Text style={styles.coachNote}>{suggestion.coachNote}</Text>
+        <Text style={styles.strategyText}>Strategia: {trainerPlan.strategy}</Text>
+      </SectionCard>
+
+      <SectionCard
+        title="Co viem z historie"
+        subtitle="Toto je zaklad, z ktoreho trener sklada navrh."
+      >
+        <View style={styles.row}>
+          <StatChip label="Priemer" value={`${trainerPlan.stats.averageWorkoutDurationMin} min`} />
+          <StatChip label="Cviky/trening" value={String(trainerPlan.stats.averageExercisesPerWorkout)} />
+          <StatChip label="Cviky/60 min" value={String(trainerPlan.stats.exercisesPer60Min)} />
+        </View>
+        <Text style={styles.tipText}>
+          Najcastejsia kombinacia: {trainerPlan.stats.commonMuscleGroupCombination}
+        </Text>
+        <Text style={styles.tipText}>
+          Casto pouzivane: {trainerPlan.stats.frequentMachines.length} | Obcas:
+          {" "}{trainerPlan.stats.occasionalMachines.length} | Este nepouzite:
+          {" "}{trainerPlan.stats.neverUsedMachines.length}
+        </Text>
       </SectionCard>
 
       <SectionCard
@@ -181,22 +211,38 @@ export function HomeScreen({
 
       <SectionCard
         title="Cviky na dnes"
-        subtitle="Vyber si z navrhovanych strojov. Po otvoreni zapises vahu, serie a opakovania."
+        subtitle="Poradie nie je nahodne. Trener strieda zataz, partie a prida aj nieco nove."
       >
         <View style={styles.machineStack}>
-          {suggestion.highlightedMachines.slice(0, suggestedCount).map((machine) => (
+          {trainerPlan.exercises.map((exercise) => (
             <Pressable
-              key={machine.id}
+              key={exercise.machine.id}
               onPress={() => {
                 triggerTapHaptic();
-                onOpenMachine(machine);
+                onOpenMachine(exercise.machine);
               }}
               style={styles.machineCard}
             >
               <View style={styles.machineMeta}>
-                <Tag label={machine.muscleGroup} />
-                <Text style={styles.machineName}>{machine.displayNameSk}</Text>
-                <Text style={styles.machineCategory}>{machine.descriptionSk}</Text>
+                <View style={styles.exerciseTopRow}>
+                  <Tag label={`${exercise.order}. ${exercise.muscleGroup}`} />
+                  {exercise.isDiscovery ? (
+                    <Text style={styles.discoveryLabel}>novy impulz</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.machineName}>{exercise.machine.displayNameSk}</Text>
+                <Text style={styles.machineCategory}>{exercise.machine.descriptionSk}</Text>
+                <ExerciseRestBlock
+                  exercise={exercise}
+                  expandedWhyId={expandedWhyId}
+                  onToggleWhy={() => {
+                    triggerTapHaptic();
+                    setExpandedWhyId((current) =>
+                      current === exercise.machine.id ? null : exercise.machine.id
+                    );
+                  }}
+                  styles={styles}
+                />
               </View>
             </Pressable>
           ))}
@@ -249,6 +295,52 @@ export function HomeScreen({
         )}
       </SectionCard>
     </ScrollView>
+  );
+}
+
+function ExerciseRestBlock({
+  exercise,
+  expandedWhyId,
+  onToggleWhy,
+  styles
+}: {
+  exercise: PlannedExercise;
+  expandedWhyId: string | null;
+  onToggleWhy: () => void;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const isWhyOpen = expandedWhyId === exercise.machine.id;
+  const restText =
+    exercise.recommendedRestMaxSec === 0
+      ? "podla potreby"
+      : `${exercise.recommendedRestMinSec}-${exercise.recommendedRestMaxSec} sek`;
+
+  return (
+    <View style={styles.restBox}>
+      <View style={styles.restGrid}>
+        <View>
+          <Text style={styles.restLabel}>Odporucana prestavka</Text>
+          <Text style={styles.restValue}>{restText}</Text>
+        </View>
+        <View>
+          <Text style={styles.restLabel}>Serie</Text>
+          <Text style={styles.restValue}>{exercise.sets} x {exercise.reps}</Text>
+        </View>
+      </View>
+      {exercise.userAverageRestSec ? (
+        <Text style={styles.restSmallText}>
+          Tvoja priemerna prestavka: {exercise.userAverageRestSec} sek
+        </Text>
+      ) : null}
+      <Text style={styles.restSmallText}>Ciel: rast svalov</Text>
+      {exercise.note ? <Text style={styles.restNote}>{exercise.note}</Text> : null}
+      <Pressable onPress={onToggleWhy} style={styles.restWhyButton}>
+        <Text style={styles.restWhyLabel}>
+          {isWhyOpen ? "Skryt vysvetlenie" : "Preco takato prestavka?"}
+        </Text>
+      </Pressable>
+      {isWhyOpen ? <Text style={styles.restWhyText}>{exercise.whyRest}</Text> : null}
+    </View>
   );
 }
 
@@ -329,6 +421,13 @@ function createStyles(colors: AppColors) {
     lineHeight: 23,
     color: colors.text
   },
+  strategyText: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textMuted,
+    fontWeight: "700"
+  },
   dataPill: {
     alignSelf: "flex-start",
     marginTop: 14,
@@ -364,6 +463,19 @@ function createStyles(colors: AppColors) {
     padding: 16,
     gap: 8
   },
+  exerciseTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  discoveryLabel: {
+    color: colors.highlight,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.7
+  },
   machineName: {
     fontSize: 18,
     fontWeight: "700",
@@ -373,6 +485,58 @@ function createStyles(colors: AppColors) {
     fontSize: 14,
     lineHeight: 20,
     color: colors.textMuted
+  },
+  restBox: {
+    marginTop: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.surface,
+    padding: 12,
+    gap: 7
+  },
+  restGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  restLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6
+  },
+  restValue: {
+    marginTop: 3,
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  restSmallText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  restNote: {
+    color: colors.highlight,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "800"
+  },
+  restWhyButton: {
+    alignSelf: "flex-start",
+    marginTop: 2
+  },
+  restWhyLabel: {
+    color: colors.highlight,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  restWhyText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19
   },
   lastSessionSummary: {
     marginTop: 16,
