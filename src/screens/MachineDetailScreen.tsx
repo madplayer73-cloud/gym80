@@ -16,6 +16,11 @@ import { AppColors, useTheme } from "../theme";
 import { Machine, WorkoutEntry, WorkoutFeeling } from "../types";
 import { triggerSuccessHaptic, triggerTapHaptic } from "../utils/haptics";
 import { getMachineImage } from "../utils/machineImages";
+import {
+  getEntryProgressionAdvice,
+  getPlannedProgressionAdvice,
+  ProgressionAdviceLevel
+} from "../utils/progressionAdvice";
 
 type MachineDetailEntry = WorkoutEntry & {
   workoutDate: string;
@@ -97,6 +102,17 @@ export function MachineDetailScreen({
   const [inclinePercent, setInclinePercent] = React.useState("0");
   const [feeling, setFeeling] = React.useState<WorkoutFeeling>("akurat");
   const [note, setNote] = React.useState("");
+  const latestProgressionAdvice = !isCardio
+    ? getEntryProgressionAdvice(latestEntry)
+    : null;
+  const plannedProgressionAdvice = !isCardio
+    ? getPlannedProgressionAdvice({
+        latestEntry,
+        plannedWeightKg: Number(weightKg),
+        plannedSets: Number(sets),
+        plannedReps: Number(reps)
+      })
+    : null;
 
   React.useEffect(() => {
     setWeightKg(latestEntry?.weightKg ? String(latestEntry.weightKg) : "");
@@ -254,6 +270,17 @@ export function MachineDetailScreen({
               <Text style={styles.note}>Pocit: {translateFeeling(latestEntry.feeling)}</Text>
             ) : null}
             <Text style={styles.note}>{latestEntry.note ?? "Bez poznamky."}</Text>
+            {latestProgressionAdvice ? (
+              <View
+                style={[
+                  styles.adviceCard,
+                  getAdviceCardStyle(styles, latestProgressionAdvice.level)
+                ]}
+              >
+                <Text style={styles.adviceTitle}>{latestProgressionAdvice.title}</Text>
+                <Text style={styles.adviceText}>{latestProgressionAdvice.message}</Text>
+              </View>
+            ) : null}
           </>
         ) : (
           <Text style={styles.note}>Na tomto stroji este nie je ziadny zapis.</Text>
@@ -347,6 +374,17 @@ export function MachineDetailScreen({
           </View>
         ) : (
           <>
+            {plannedProgressionAdvice ? (
+              <View
+                style={[
+                  styles.adviceCard,
+                  getAdviceCardStyle(styles, plannedProgressionAdvice.level)
+                ]}
+              >
+                <Text style={styles.adviceTitle}>{plannedProgressionAdvice.title}</Text>
+                <Text style={styles.adviceText}>{plannedProgressionAdvice.message}</Text>
+              </View>
+            ) : null}
             <Text style={styles.fieldLabel}>Navrhovana vaha</Text>
             <View style={styles.weightAdjustRow}>
               <Pressable onPress={() => adjustWeight(-2.5)} style={styles.adjustButton}>
@@ -729,6 +767,40 @@ function createStyles(colors: AppColors) {
     lineHeight: 22,
     color: colors.text
   },
+  adviceCard: {
+    marginTop: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  adviceCardSuccess: {
+    backgroundColor: "rgba(47, 122, 87, 0.16)",
+    borderColor: colors.success
+  },
+  adviceCardWarning: {
+    backgroundColor: "rgba(217, 108, 31, 0.18)",
+    borderColor: colors.highlight
+  },
+  adviceCardDanger: {
+    backgroundColor: "rgba(172, 44, 44, 0.18)",
+    borderColor: "#c74747"
+  },
+  adviceCardInfo: {
+    backgroundColor: colors.highlightSoft,
+    borderColor: colors.border
+  },
+  adviceTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+    marginBottom: 5
+  },
+  adviceText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21
+  },
   timeline: {
     gap: 12
   },
@@ -829,4 +901,23 @@ function translateFeeling(feeling: WorkoutFeeling) {
   }
 
   return "bolest";
+}
+
+function getAdviceCardStyle(
+  styles: ReturnType<typeof createStyles>,
+  level: ProgressionAdviceLevel
+) {
+  if (level === "success") {
+    return styles.adviceCardSuccess;
+  }
+
+  if (level === "warning") {
+    return styles.adviceCardWarning;
+  }
+
+  if (level === "danger") {
+    return styles.adviceCardDanger;
+  }
+
+  return styles.adviceCardInfo;
 }

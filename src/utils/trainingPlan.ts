@@ -1,4 +1,4 @@
-import { Machine, WorkoutFocus, WorkoutSession } from "../types";
+import { Machine, MuscleGroup, WorkoutFocus, WorkoutSession } from "../types";
 
 type DailySuggestion = {
   focus: WorkoutFocus;
@@ -154,6 +154,85 @@ function sortMachinesForUser(
   });
 }
 
+function sortBucketMachines(
+  machines: Machine[],
+  sessions: WorkoutSession[],
+  latestMachineIds: Set<string>
+) {
+  const useCounts = getMachineUseCounts(sessions);
+
+  return [...machines].sort((a, b) => {
+    const aWasUsedLast = latestMachineIds.has(a.id) ? 1 : 0;
+    const bWasUsedLast = latestMachineIds.has(b.id) ? 1 : 0;
+
+    if (aWasUsedLast !== bWasUsedLast) {
+      return aWasUsedLast - bWasUsedLast;
+    }
+
+    return (useCounts.get(b.id) ?? 0) - (useCounts.get(a.id) ?? 0);
+  });
+}
+
+function pickOneFromGroup(
+  machines: Machine[],
+  group: MuscleGroup | MuscleGroup[],
+  sessions: WorkoutSession[],
+  latestMachineIds: Set<string>,
+  selectedIds: Set<string>
+) {
+  const groups = Array.isArray(group) ? group : [group];
+  const candidates = sortBucketMachines(
+    machines.filter((machine) => groups.includes(machine.muscleGroup)),
+    sessions,
+    latestMachineIds
+  );
+
+  return candidates.find((machine) => !selectedIds.has(machine.id));
+}
+
+function buildBalancedMachines(
+  focus: WorkoutFocus,
+  machines: Machine[],
+  sessions: WorkoutSession[]
+) {
+  const fallback = sortMachinesForUser(focus, machines, sessions);
+  const latestMachineIds = new Set(sessions[0]?.entries.map((entry) => entry.machineId) ?? []);
+  const selectedIds = new Set<string>();
+  const selected: Machine[] = [];
+  const buckets: Array<MuscleGroup | MuscleGroup[]> =
+    focus === "Spodok tela"
+      ? ["Nohy", "Brucho", "Nohy", "Brucho"]
+      : focus === "Vrch tela"
+        ? ["Hrudnik", "Ramena", ["Ruky", "Triceps"], "Chrbat", "Hrudnik", "Ramena"]
+        : focus === "Brucho"
+          ? ["Brucho"]
+          : ["Kardio"];
+
+  buckets.forEach((bucket) => {
+    const picked = pickOneFromGroup(
+      machines,
+      bucket,
+      sessions,
+      latestMachineIds,
+      selectedIds
+    );
+
+    if (picked) {
+      selectedIds.add(picked.id);
+      selected.push(picked);
+    }
+  });
+
+  fallback.forEach((machine) => {
+    if (!selectedIds.has(machine.id)) {
+      selectedIds.add(machine.id);
+      selected.push(machine);
+    }
+  });
+
+  return selected;
+}
+
 function getDaysSinceLastTraining(workoutDate?: string) {
   if (!workoutDate) {
     return null;
@@ -283,17 +362,13 @@ export function buildDailySuggestion(
 
   let nextFocus: WorkoutFocus = chooseFocusFromHistory(sessions, machinesById);
 
-  if (daysSinceLastTraining === 0 && latestSession?.focus === "Vrch tela") {
-    nextFocus = "Spodok tela";
-  }
-
-  if (daysSinceLastTraining === 0 && latestSession?.focus === "Spodok tela") {
-    nextFocus = "Vrch tela";
+  if (daysSinceLastTraining === 0 && latestSession) {
+    nextFocus = getFocusFromEntries(latestSession, machinesById);
   }
 
   const addonMin = durationMin >= 90 ? 20 : 10;
   const mainWorkoutMin = Math.max(20, durationMin - warmupMin - cooldownMin - addonMin);
-  const highlightedMachines = sortMachinesForUser(nextFocus, machines, sessions);
+  const highlightedMachines = buildBalancedMachines(nextFocus, machines, sessions);
   const estimatedCalories = estimatePlannedCalories(
     durationMin,
     warmupMin,

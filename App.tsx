@@ -22,6 +22,7 @@ import { AppColors, ThemeMode, ThemeProvider, useTheme } from "./src/theme";
 
 const STORAGE_KEY = "gym80-tracker-sessions";
 const FAVORITES_STORAGE_KEY = "gym80-tracker-favorites";
+const THEME_STORAGE_KEY = "gym80-tracker-theme";
 
 function mapMuscleGroupToFocus(muscleGroup?: MuscleGroup): WorkoutFocus {
   if (!muscleGroup) {
@@ -108,6 +109,41 @@ function isWorkoutSession(value: unknown): value is WorkoutSession {
 
 export default function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
+  const [hasLoadedTheme, setHasLoadedTheme] = useState(false);
+
+  React.useEffect(() => {
+    const loadStoredTheme = async () => {
+      try {
+        const rawValue = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+
+        if (rawValue === "light" || rawValue === "dark") {
+          setThemeMode(rawValue);
+        }
+      } catch (error) {
+        console.log("Failed to load stored theme", error);
+      } finally {
+        setHasLoadedTheme(true);
+      }
+    };
+
+    void loadStoredTheme();
+  }, []);
+
+  React.useEffect(() => {
+    if (!hasLoadedTheme) {
+      return;
+    }
+
+    const persistTheme = async () => {
+      try {
+        await AsyncStorage.setItem(THEME_STORAGE_KEY, themeMode);
+      } catch (error) {
+        console.log("Failed to store theme", error);
+      }
+    };
+
+    void persistTheme();
+  }, [hasLoadedTheme, themeMode]);
 
   return (
     <ThemeProvider mode={themeMode} setMode={setThemeMode}>
