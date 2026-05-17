@@ -32,6 +32,7 @@ type MachineDetailScreenProps = {
   machine: Machine;
   entries: MachineDetailEntry[];
   onBack: () => void;
+  onBackToPlan?: () => void;
   onSaveEntry: (input: {
     machineId: string;
     weightKg?: number;
@@ -59,6 +60,7 @@ export function MachineDetailScreen({
   entries,
   isFavorite,
   onBack,
+  onBackToPlan,
   onSaveEntry,
   onToggleFavorite
 }: MachineDetailScreenProps) {
@@ -191,6 +193,17 @@ export function MachineDetailScreen({
         >
           <Text style={styles.backLabel}>Spat na stroje</Text>
         </Pressable>
+        {onBackToPlan ? (
+          <Pressable
+            onPress={() => {
+              triggerTapHaptic();
+              onBackToPlan();
+            }}
+            style={styles.planBackButton}
+          >
+            <Text style={styles.planBackLabel}>Spat na cviky</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => {
             triggerTapHaptic();
@@ -546,7 +559,8 @@ function createStyles(colors: AppColors) {
     marginTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12
+    gap: 10,
+    flexWrap: "wrap"
   },
   backButton: {
     alignSelf: "flex-start",
@@ -563,6 +577,19 @@ function createStyles(colors: AppColors) {
   backLabel: {
     color: "#fff8ee",
     fontWeight: "700"
+  },
+  planBackButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(47, 122, 87, 0.16)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.success
+  },
+  planBackLabel: {
+    color: colors.success,
+    fontWeight: "900"
   },
   favoriteButton: {
     alignSelf: "flex-start",

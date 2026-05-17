@@ -156,6 +156,7 @@ function AppShell() {
   const { colors, mode } = useTheme();
   const [activeTab, setActiveTab] = useState<AppTab>("home");
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
+  const [selectedMachineSource, setSelectedMachineSource] = useState<"home" | "machines">("machines");
   const [sessions, setSessions] = useState(mockWorkoutSessions);
   const [favoriteMachineIds, setFavoriteMachineIds] = useState<string[]>([]);
   const [hasLoadedStoredSessions, setHasLoadedStoredSessions] = useState(false);
@@ -207,8 +208,9 @@ function AppShell() {
     [sessions]
   );
 
-  const openMachine = (machine: Machine) => {
+  const openMachine = (machine: Machine, source: "home" | "machines" = "machines") => {
     setSelectedMachine(machine);
+    setSelectedMachineSource(source);
     setActiveTab("machine-detail");
   };
 
@@ -218,6 +220,10 @@ function AppShell() {
 
   const navigateBackFromMachine = () => {
     setActiveTab("machines");
+  };
+
+  const navigateBackToPlan = () => {
+    setActiveTab("home");
   };
 
   const navigateBackFromCamera = () => {
@@ -386,7 +392,7 @@ function AppShell() {
       return [newSession, ...currentSessions];
     });
 
-    setActiveTab("machines");
+    setActiveTab(selectedMachineSource === "home" ? "home" : "machines");
     setToastMessage("Ulozene");
   };
 
@@ -457,7 +463,7 @@ function AppShell() {
       <HomeScreen
         machines={mockMachines}
         sessions={sessions}
-        onOpenMachine={openMachine}
+        onOpenMachine={(machine) => openMachine(machine, "home")}
       />
     );
   }
@@ -469,7 +475,7 @@ function AppShell() {
         machineUsageCounts={machineUsageCounts}
         machines={mockMachines}
         onOpenCamera={openCameraPrep}
-        onOpenMachine={openMachine}
+        onOpenMachine={(machine) => openMachine(machine, "machines")}
       />
     );
   }
@@ -496,6 +502,7 @@ function AppShell() {
         machine={selectedMachine}
         isFavorite={favoriteMachineIds.includes(selectedMachine.id)}
         onBack={navigateBackFromMachine}
+        onBackToPlan={selectedMachineSource === "home" ? navigateBackToPlan : undefined}
         onSaveEntry={saveWorkoutEntry}
         onToggleFavorite={() => toggleFavoriteMachine(selectedMachine.id)}
       />
@@ -507,7 +514,7 @@ function AppShell() {
       <CameraPrepScreen
         machines={mockMachines}
         onBack={navigateBackFromCamera}
-        onPickMachine={openMachine}
+        onPickMachine={(machine) => openMachine(machine, "machines")}
       />
     );
   }

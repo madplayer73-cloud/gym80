@@ -66,6 +66,14 @@ export function HomeScreen({
   const lastSessionCalories = lastSession
     ? estimateSessionCalories(lastSession, (machineId) => machineMap.get(machineId))
     : null;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const completedTodayMachineIds = React.useMemo(() => {
+    return new Set(
+      sessions
+        .filter((session) => session.workoutDate.slice(0, 10) === todayKey)
+        .flatMap((session) => session.entries.map((entry) => entry.machineId))
+    );
+  }, [sessions, todayKey]);
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -234,17 +242,25 @@ export function HomeScreen({
         subtitle="Poradie nie je nahodne. Trener strieda zataz, partie a prida aj nieco nove."
       >
         <View style={styles.machineStack}>
-          {trainerPlan.exercises.map((exercise) => (
+          {trainerPlan.exercises.map((exercise) => {
+            const isCompleted = completedTodayMachineIds.has(exercise.machine.id);
+
+            return (
             <View
               key={exercise.machine.id}
-              style={styles.machineCard}
+              style={[styles.machineCard, isCompleted ? styles.machineCardCompleted : null]}
             >
               <View style={styles.machineMeta}>
                 <View style={styles.exerciseTopRow}>
                   <Tag label={`${exercise.order}. ${exercise.muscleGroup}`} />
-                  {exercise.isDiscovery ? (
-                    <Text style={styles.discoveryLabel}>novy impulz</Text>
-                  ) : null}
+                  <View style={styles.exerciseBadges}>
+                    {isCompleted ? (
+                      <Text style={styles.completedLabel}>✓ Hotovo</Text>
+                    ) : null}
+                    {exercise.isDiscovery ? (
+                      <Text style={styles.discoveryLabel}>novy impulz</Text>
+                    ) : null}
+                  </View>
                 </View>
                 <Text style={styles.machineName}>{exercise.machine.displayNameSk}</Text>
                 <ExerciseRestBlock
@@ -270,7 +286,8 @@ export function HomeScreen({
                 </Pressable>
               </View>
             </View>
-          ))}
+            );
+          })}
         </View>
       </SectionCard>
 
@@ -497,6 +514,10 @@ function createStyles(colors: AppColors) {
     borderWidth: 1,
     borderColor: colors.inputBorder
   },
+  machineCardCompleted: {
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.1)"
+  },
   machineMeta: {
     padding: 16,
     gap: 8
@@ -506,6 +527,20 @@ function createStyles(colors: AppColors) {
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10
+  },
+  exerciseBadges: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "flex-end"
+  },
+  completedLabel: {
+    color: colors.success,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.7
   },
   discoveryLabel: {
     color: colors.highlight,
