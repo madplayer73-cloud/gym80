@@ -352,7 +352,8 @@ export function buildDailySuggestion(
   machines: Machine[],
   durationMin = 60,
   warmupMin = durationMin >= 90 ? 10 : 8,
-  cooldownMin = durationMin >= 90 ? 8 : 5
+  cooldownMin = durationMin >= 90 ? 8 : 5,
+  preferredFocus?: WorkoutFocus
 ): DailySuggestion {
   const latestSession = sessions[0];
   const machinesById = getMachineById(machines);
@@ -360,9 +361,9 @@ export function buildDailySuggestion(
   const dataConfidence: DailySuggestion["dataConfidence"] =
     sessions.length >= 4 ? "podla historie" : sessions.length >= 1 ? "ucim sa" : "zaciatok";
 
-  let nextFocus: WorkoutFocus = chooseFocusFromHistory(sessions, machinesById);
+  let nextFocus: WorkoutFocus = preferredFocus ?? chooseFocusFromHistory(sessions, machinesById);
 
-  if (daysSinceLastTraining === 0 && latestSession) {
+  if (!preferredFocus && daysSinceLastTraining === 0 && latestSession) {
     nextFocus = getFocusFromEntries(latestSession, machinesById);
   }
 

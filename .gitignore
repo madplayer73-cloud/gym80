@@ -1,4 +1,5 @@
 node_modules/
+vehicle-damage-reporting-app/
 .expo/
 dist/
 web-build/

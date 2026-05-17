@@ -10,7 +10,7 @@ import { SectionCard } from "../components/SectionCard";
 import { StatChip } from "../components/StatChip";
 import { Tag } from "../components/Tag";
 import { AppColors, useTheme } from "../theme";
-import { Machine, WorkoutSession } from "../types";
+import { Machine, WorkoutFocus, WorkoutSession } from "../types";
 import { estimateSessionCalories } from "../utils/calories";
 import { triggerTapHaptic } from "../utils/haptics";
 import { generateTrainerPlan, PlannedExercise } from "../utils/trainerPlanner";
@@ -26,6 +26,10 @@ const durationOptions = [60, 90, 120];
 const warmupOptions = [5, 8, 10, 15];
 const cooldownOptions = [3, 5, 8, 10];
 
+function getNextFocus(currentFocus: WorkoutFocus) {
+  return currentFocus === "Spodok tela" ? "Vrch tela" : "Spodok tela";
+}
+
 export function HomeScreen({
   machines,
   sessions,
@@ -36,12 +40,14 @@ export function HomeScreen({
   const [durationMin, setDurationMin] = React.useState(60);
   const [warmupMin, setWarmupMin] = React.useState(8);
   const [cooldownMin, setCooldownMin] = React.useState(5);
+  const [manualFocus, setManualFocus] = React.useState<WorkoutFocus | null>(null);
   const suggestion = buildDailySuggestion(
     sessions,
     machines,
     durationMin,
     warmupMin,
-    cooldownMin
+    cooldownMin,
+    manualFocus ?? undefined
   );
   const trainerPlan = generateTrainerPlan({
     sessions,
@@ -175,6 +181,20 @@ export function HomeScreen({
         </View>
         <Text style={styles.coachNote}>{suggestion.coachNote}</Text>
         <Text style={styles.strategyText}>Strategia: {trainerPlan.strategy}</Text>
+        <Pressable
+          onPress={() => {
+            triggerTapHaptic();
+            setManualFocus(getNextFocus(suggestion.focus));
+            setExpandedWhyId(null);
+          }}
+          style={styles.newPlanButton}
+        >
+          <Text style={styles.newPlanButtonText}>
+            Navrhni novy trening: {getNextFocus(suggestion.focus) === "Spodok tela"
+              ? "nohy + brucho"
+              : "ruky + hrudnik + ramena"}
+          </Text>
+        </Pressable>
       </SectionCard>
 
       <SectionCard
@@ -215,12 +235,8 @@ export function HomeScreen({
       >
         <View style={styles.machineStack}>
           {trainerPlan.exercises.map((exercise) => (
-            <Pressable
+            <View
               key={exercise.machine.id}
-              onPress={() => {
-                triggerTapHaptic();
-                onOpenMachine(exercise.machine);
-              }}
               style={styles.machineCard}
             >
               <View style={styles.machineMeta}>
@@ -231,7 +247,6 @@ export function HomeScreen({
                   ) : null}
                 </View>
                 <Text style={styles.machineName}>{exercise.machine.displayNameSk}</Text>
-                <Text style={styles.machineCategory}>{exercise.machine.descriptionSk}</Text>
                 <ExerciseRestBlock
                   exercise={exercise}
                   expandedWhyId={expandedWhyId}
@@ -243,8 +258,18 @@ export function HomeScreen({
                   }}
                   styles={styles}
                 />
+                <Text style={styles.machineCategory}>{exercise.machine.descriptionSk}</Text>
+                <Pressable
+                  onPress={() => {
+                    triggerTapHaptic();
+                    onOpenMachine(exercise.machine);
+                  }}
+                  style={styles.openMachineButton}
+                >
+                  <Text style={styles.openMachineButtonText}>Otvorit stroj a zapisat vykon</Text>
+                </Pressable>
               </View>
-            </Pressable>
+            </View>
           ))}
         </View>
       </SectionCard>
@@ -428,6 +453,19 @@ function createStyles(colors: AppColors) {
     color: colors.textMuted,
     fontWeight: "700"
   },
+  newPlanButton: {
+    marginTop: 16,
+    backgroundColor: colors.highlight,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: "center"
+  },
+  newPlanButtonText: {
+    color: colors.onAccent,
+    fontSize: 15,
+    fontWeight: "900"
+  },
   dataPill: {
     alignSelf: "flex-start",
     marginTop: 14,
@@ -490,8 +528,8 @@ function createStyles(colors: AppColors) {
     marginTop: 8,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.surface,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.16)",
     padding: 12,
     gap: 7
   },
@@ -501,7 +539,7 @@ function createStyles(colors: AppColors) {
     gap: 12
   },
   restLabel: {
-    color: colors.textMuted,
+    color: colors.success,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -519,7 +557,7 @@ function createStyles(colors: AppColors) {
     lineHeight: 19
   },
   restNote: {
-    color: colors.highlight,
+    color: colors.success,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "800"
@@ -529,7 +567,7 @@ function createStyles(colors: AppColors) {
     marginTop: 2
   },
   restWhyLabel: {
-    color: colors.highlight,
+    color: colors.success,
     fontSize: 13,
     fontWeight: "900"
   },
@@ -537,6 +575,19 @@ function createStyles(colors: AppColors) {
     color: colors.textMuted,
     fontSize: 13,
     lineHeight: 19
+  },
+  openMachineButton: {
+    marginTop: 8,
+    borderRadius: 14,
+    backgroundColor: colors.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: "center"
+  },
+  openMachineButtonText: {
+    color: colors.onAccent,
+    fontSize: 14,
+    fontWeight: "900"
   },
   lastSessionSummary: {
     marginTop: 16,

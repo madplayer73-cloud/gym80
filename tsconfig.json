@@ -14,8 +14,15 @@
     ]
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx"
+    "App.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".expo",
+    "vehicle-damage-reporting-app"
   ],
   "extends": "expo/tsconfig.base"
 }
