@@ -21,6 +21,7 @@ import {
   getPlannedProgressionAdvice,
   ProgressionAdviceLevel
 } from "../utils/progressionAdvice";
+import { getMachineTrainingGuidance } from "../utils/trainerPlanner";
 
 type MachineDetailEntry = WorkoutEntry & {
   workoutDate: string;
@@ -94,8 +95,14 @@ export function MachineDetailScreen({
   const maxCardioDuration = cardioEntries.length
     ? Math.max(...cardioEntries.map((entry) => entry.durationMin ?? 0))
     : 0;
+  const trainingGuidance = getMachineTrainingGuidance(machine);
+  const restText =
+    trainingGuidance.recommendedRestMaxSec === 0
+      ? "podla potreby"
+      : `${trainingGuidance.recommendedRestMinSec}-${trainingGuidance.recommendedRestMaxSec} sek`;
 
   const [isImageOpen, setIsImageOpen] = React.useState(false);
+  const [isRestWhyOpen, setIsRestWhyOpen] = React.useState(false);
   const [weightKg, setWeightKg] = React.useState("");
   const [sets, setSets] = React.useState("4");
   const [reps, setReps] = React.useState("10");
@@ -246,6 +253,42 @@ export function MachineDetailScreen({
         </View>
         <Text style={styles.description}>{machine.descriptionSk}</Text>
       </View>
+
+      <SectionCard
+        title="Odporucana prestavka"
+        subtitle="Orientacne odporucanie pre rast svalov pri tomto stroji."
+      >
+        <View style={styles.restBox}>
+          <View style={styles.restGrid}>
+            <View>
+              <Text style={styles.restLabel}>Pauza medzi seriami</Text>
+              <Text style={styles.restValue}>{restText}</Text>
+            </View>
+            <View>
+              <Text style={styles.restLabel}>Ciel</Text>
+              <Text style={styles.restValue}>rast svalov</Text>
+            </View>
+          </View>
+          <Text style={styles.restSmallText}>
+            Typ cviku: {translateExerciseType(trainingGuidance.exerciseType)} - narocnost:{" "}
+            {translateDifficulty(trainingGuidance.difficulty)}
+          </Text>
+          <Pressable
+            onPress={() => {
+              triggerTapHaptic();
+              setIsRestWhyOpen((current) => !current);
+            }}
+            style={styles.restWhyButton}
+          >
+            <Text style={styles.restWhyLabel}>
+              {isRestWhyOpen ? "Skryt vysvetlenie" : "Preco takato prestavka?"}
+            </Text>
+          </Pressable>
+          {isRestWhyOpen ? (
+            <Text style={styles.restWhyText}>{trainingGuidance.whyRest}</Text>
+          ) : null}
+        </View>
+      </SectionCard>
 
       <SectionCard
         title="Posledny vykon"
@@ -828,6 +871,52 @@ function createStyles(colors: AppColors) {
     fontSize: 14,
     lineHeight: 21
   },
+  restBox: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.14)",
+    padding: 14,
+    gap: 8
+  },
+  restGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap"
+  },
+  restLabel: {
+    color: colors.success,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.6
+  },
+  restValue: {
+    marginTop: 4,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: "900"
+  },
+  restSmallText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  restWhyButton: {
+    alignSelf: "flex-start",
+    marginTop: 2
+  },
+  restWhyLabel: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  restWhyText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19
+  },
   timeline: {
     gap: 12
   },
@@ -928,6 +1017,38 @@ function translateFeeling(feeling: WorkoutFeeling) {
   }
 
   return "bolest";
+}
+
+function translateExerciseType(type: string) {
+  if (type === "compound") {
+    return "zakladny";
+  }
+
+  if (type === "isolation") {
+    return "izolovany";
+  }
+
+  if (type === "core") {
+    return "brucho/stred tela";
+  }
+
+  if (type === "cardio") {
+    return "kardio";
+  }
+
+  return "mobilita";
+}
+
+function translateDifficulty(difficulty: string) {
+  if (difficulty === "hard") {
+    return "tazsi";
+  }
+
+  if (difficulty === "easy") {
+    return "lahsi";
+  }
+
+  return "stredna";
 }
 
 function getAdviceCardStyle(

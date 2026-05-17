@@ -19,7 +19,6 @@ type HistoryScreenProps = {
   exportValue: string;
   sessions: WorkoutSession[];
   getMachine: (machineId: string) => Machine | undefined;
-  onClearHistory: () => void;
   onDeleteEntry: (entryId: string) => void;
   onImportHistory: (rawValue: string) => boolean;
 };
@@ -28,7 +27,6 @@ export function HistoryScreen({
   exportValue,
   sessions,
   getMachine,
-  onClearHistory,
   onDeleteEntry,
   onImportHistory
 }: HistoryScreenProps) {
@@ -49,6 +47,60 @@ export function HistoryScreen({
   const latestTrainingLabel = sessions[0]
     ? new Date(sessions[0].workoutDate).toLocaleDateString("sk-SK")
     : "-";
+  const machineCounts = sessions.reduce<Record<string, number>>((counts, session) => {
+    session.entries.forEach((entry) => {
+      counts[entry.machineId] = (counts[entry.machineId] ?? 0) + 1;
+    });
+
+    return counts;
+  }, {});
+  const usedMachineIds = Object.keys(machineCounts);
+  const mostUsedMachineId = [...usedMachineIds].sort(
+    (a, b) => (machineCounts[b] ?? 0) - (machineCounts[a] ?? 0)
+  )[0];
+  const mostUsedMachine = mostUsedMachineId ? getMachine(mostUsedMachineId) : undefined;
+  const groupCounts = sessions.reduce<Record<string, number>>((counts, session) => {
+    session.entries.forEach((entry) => {
+      const group = getMachine(entry.machineId)?.muscleGroup ?? "Ine";
+      counts[group] = (counts[group] ?? 0) + 1;
+    });
+
+    return counts;
+  }, {});
+  const maxGroupCount = Math.max(1, ...Object.values(groupCounts));
+  const groupRows = Object.entries(groupCounts).sort((a, b) => b[1] - a[1]);
+  const progressRows = usedMachineIds
+    .map((machineId) => {
+      const weightedEntries = sessions
+        .flatMap((session) => session.entries)
+        .filter((entry) => entry.machineId === machineId && typeof entry.weightKg === "number")
+        .sort(
+          (a, b) =>
+            new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime()
+        );
+
+      if (weightedEntries.length < 2) {
+        return null;
+      }
+
+      const first = weightedEntries[0].weightKg ?? 0;
+      const latest = weightedEntries[weightedEntries.length - 1].weightKg ?? 0;
+
+      return {
+        machineId,
+        name: getMachine(machineId)?.displayNameSk ?? machineId,
+        delta: latest - first
+      };
+    })
+    .filter(
+      (row): row is { machineId: string; name: string; delta: number } => row !== null
+    )
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 5) as Array<{ machineId: string; name: string; delta: number }>;
+  const maxProgressDelta = Math.max(
+    1,
+    ...progressRows.map((row) => Math.abs(row.delta))
+  );
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -77,6 +129,73 @@ export function HistoryScreen({
         <Text style={styles.latestValue}>{latestTrainingLabel}</Text>
       </View>
 
+      <SectionCard
+        title="Celkovy progres"
+        subtitle="Rychly prehlad toho, co v treningoch realne robis najcastejsie."
+      >
+        <View style={styles.row}>
+          <StatChip label="Pouzite stroje" value={String(usedMachineIds.length)} />
+          <StatChip
+            label="Najcastejsi"
+            value={mostUsedMachine ? mostUsedMachine.displayNameSk : "-"}
+          />
+        </View>
+        {groupRows.length > 0 ? (
+          <View style={styles.groupChart}>
+            {groupRows.map(([group, count]) => (
+              <View key={group} style={styles.groupRow}>
+                <View style={styles.groupHeader}>
+                  <Text style={styles.groupName}>{group}</Text>
+                  <Text style={styles.groupCount}>{count}x</Text>
+                </View>
+                <View style={styles.groupTrack}>
+                  <View
+                    style={[
+                      styles.groupFill,
+                      { width: `${Math.max(8, (count / maxGroupCount) * 100)}%` }
+                    ]}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyChartText}>
+            Este tu nie su data. Po par treningoch sa tu ukaze, co drvis najviac.
+          </Text>
+        )}
+        {progressRows.length > 0 ? (
+          <View style={styles.progressSummary}>
+            <Text style={styles.progressSummaryTitle}>Top progres podla vahy</Text>
+            {progressRows.map((row) => (
+              <View key={row.machineId} style={styles.groupRow}>
+                <View style={styles.groupHeader}>
+                  <Text style={styles.groupName}>{row.name}</Text>
+                  <Text
+                    style={[
+                      styles.groupCount,
+                      row.delta >= 0 ? styles.progressPositive : styles.progressNegative
+                    ]}
+                  >
+                    {row.delta >= 0 ? "+" : ""}
+                    {row.delta} kg
+                  </Text>
+                </View>
+                <View style={styles.groupTrack}>
+                  <View
+                    style={[
+                      styles.groupFill,
+                      row.delta < 0 ? styles.progressFillNegative : null,
+                      { width: `${Math.max(8, (Math.abs(row.delta) / maxProgressDelta) * 100)}%` }
+                    ]}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </SectionCard>
+
       <View style={styles.backupRow}>
         <Pressable
           onPress={() => {
@@ -98,18 +217,6 @@ export function HistoryScreen({
           <Text style={styles.backupButtonText}>Import historie</Text>
         </Pressable>
       </View>
-
-      {sessions.length > 0 ? (
-        <Pressable
-          onPress={() => {
-            triggerTapHaptic();
-            onClearHistory();
-          }}
-          style={styles.clearButton}
-        >
-          <Text style={styles.clearButtonText}>Zmazat celu historiu</Text>
-        </Pressable>
-      ) : null}
 
       {sessions.map((session) => {
         const calories = estimateSessionCalories(session, getMachine);
@@ -361,16 +468,65 @@ function createStyles(colors: AppColors) {
     fontWeight: "900",
     fontSize: 13
   },
-  clearButton: {
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    alignItems: "center"
+  groupChart: {
+    marginTop: 16,
+    gap: 12
   },
-  clearButtonText: {
-    color: colors.page,
+  groupRow: {
+    gap: 6
+  },
+  groupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  groupName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  groupCount: {
+    color: colors.textMuted,
+    fontSize: 13,
     fontWeight: "800"
+  },
+  groupTrack: {
+    height: 12,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: colors.accentSoft
+  },
+  groupFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: colors.highlight
+  },
+  emptyChartText: {
+    marginTop: 12,
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 21
+  },
+  progressSummary: {
+    marginTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 14,
+    gap: 12
+  },
+  progressSummaryTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  progressPositive: {
+    color: colors.success
+  },
+  progressNegative: {
+    color: colors.highlight
+  },
+  progressFillNegative: {
+    backgroundColor: colors.highlight
   },
   sessionHeader: {
     gap: 12

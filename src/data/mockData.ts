@@ -550,15 +550,15 @@ export const mockMachines: Machine[] = [
   {
     id: "lying-leg-curl-machine",
     brand: "Gym80",
-    modelName: "Lying Leg Curl",
-    displayNameSk: "Zakopávanie v ľahu",
+    modelName: "Seated Leg Curl",
+    displayNameSk: "Zakopavanie v sede",
     category: "Plate Loaded",
     muscleGroup: "Nohy",
-    imageHint: "Lying leg curl machine",
+    imageHint: "Seated leg curl machine",
     descriptionSk:
-      "Stroj na zakopavanie noh v lahu. Precvičuje hlavne zadnu cast stehien.",
+      "Stroj na zakopavanie noh v sede. Precvicuje hlavne zadnu cast stehien.",
     imageAsset: "zakopavanie-v-lahu.jpg",
-    setupNoteLabel: "Bench position"
+    setupNoteLabel: "Back pad position"
   },
   {
     id: "ab-bench",

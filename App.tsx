@@ -19,6 +19,7 @@ import {
   WorkoutSession
 } from "./src/types";
 import { AppColors, ThemeMode, ThemeProvider, useTheme } from "./src/theme";
+import { buildMotivationMessage } from "./src/utils/motivation";
 
 const STORAGE_KEY = "gym80-tracker-sessions";
 const FAVORITES_STORAGE_KEY = "gym80-tracker-favorites";
@@ -316,7 +317,7 @@ function AppShell() {
 
     const timeout = setTimeout(() => {
       setToastMessage(null);
-    }, 1800);
+    }, toastMessage.length > 28 ? 3600 : 1800);
 
     return () => clearTimeout(timeout);
   }, [toastMessage]);
@@ -357,6 +358,14 @@ function AppShell() {
       note,
       completedAt: workoutDate
     };
+    const previousEntry = sessions
+      .flatMap((session) => session.entries)
+      .find((entry) => entry.machineId === machineId);
+    const motivationMessage = buildMotivationMessage({
+      machine: machineMap.get(machineId),
+      entry: newEntry,
+      previousEntry
+    });
 
     setSessions((currentSessions) => {
       const todayKey = workoutDate.slice(0, 10);
@@ -393,7 +402,7 @@ function AppShell() {
     });
 
     setActiveTab(selectedMachineSource === "home" ? "home" : "machines");
-    setToastMessage("Ulozene");
+    setToastMessage(motivationMessage);
   };
 
   const toggleFavoriteMachine = (machineId: string) => {
@@ -486,7 +495,6 @@ function AppShell() {
         exportValue={historyExportValue}
         sessions={sessions}
         getMachine={(machineId) => machineMap.get(machineId)}
-        onClearHistory={clearWorkoutHistory}
         onDeleteEntry={deleteWorkoutEntry}
         onImportHistory={importWorkoutHistory}
       />
@@ -556,7 +564,12 @@ function AppShell() {
       {activeTab !== "machine-detail" && activeTab !== "camera" ? (
         <BottomNav activeTab={activeTab} onChange={setActiveTab} />
       ) : null}
-      <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      <SideMenu
+        hasHistory={sessions.length > 0}
+        isOpen={isMenuOpen}
+        onClearHistory={clearWorkoutHistory}
+        onClose={() => setIsMenuOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -639,6 +652,7 @@ function createStyles(colors: AppColors) {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    maxWidth: "88%",
     backgroundColor: "#111111",
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -651,8 +665,10 @@ function createStyles(colors: AppColors) {
     backgroundColor: "#59c184"
   },
   toastLabel: {
+    flexShrink: 1,
     color: "#fff8ee",
-    fontWeight: "800"
+    fontWeight: "800",
+    lineHeight: 20
   }
   });
 }

@@ -496,6 +496,16 @@ function buildWhyRest(meta: TrainerMachineMeta) {
   return "Stredna prestavka dava dobry pomer medzi vykonom, napumpovanim a rastom svalov.";
 }
 
+export function getMachineTrainingGuidance(machine: Machine) {
+  const meta = inferMachineMeta(machine);
+
+  return {
+    ...meta,
+    goal: "rast svalov" as const,
+    whyRest: buildWhyRest(meta)
+  };
+}
+
 function buildStrategy(focus: WorkoutFocus, hasDiscovery: boolean) {
   const base = focus === "Spodok tela"
     ? "nohy + brucho, striedanie tazsich a lahsich cvikov"
