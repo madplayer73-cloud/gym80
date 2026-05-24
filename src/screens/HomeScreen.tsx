@@ -20,11 +20,28 @@ type HomeScreenProps = {
   machines: Machine[];
   sessions: WorkoutSession[];
   onOpenMachine: (machine: Machine) => void;
+  trainerSettings: TrainerSessionSettings;
+  onChangeTrainerSettings: (settings: TrainerSessionSettings) => void;
+  onCompleteRoutine: (input: {
+    machineId: string;
+    durationMin: number;
+    note: string;
+  }) => void;
+};
+
+export type TrainerSessionSettings = {
+  durationMin: number;
+  warmupMin: number;
+  cooldownMin: number;
+  manualFocus: WorkoutFocus | null;
+  hasStarted: boolean;
 };
 
 const durationOptions = [60, 90, 120];
 const warmupOptions = [5, 8, 10, 15];
 const cooldownOptions = [3, 5, 8, 10];
+const WARMUP_ROUTINE_MACHINE_ID = "routine-warmup";
+const COOLDOWN_ROUTINE_MACHINE_ID = "routine-cooldown";
 
 function getNextFocus(currentFocus: WorkoutFocus) {
   return currentFocus === "Spodok tela" ? "Vrch tela" : "Spodok tela";
@@ -33,14 +50,20 @@ function getNextFocus(currentFocus: WorkoutFocus) {
 export function HomeScreen({
   machines,
   sessions,
-  onOpenMachine
+  onOpenMachine,
+  trainerSettings,
+  onChangeTrainerSettings,
+  onCompleteRoutine
 }: HomeScreenProps) {
   const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
-  const [durationMin, setDurationMin] = React.useState(60);
-  const [warmupMin, setWarmupMin] = React.useState(8);
-  const [cooldownMin, setCooldownMin] = React.useState(5);
-  const [manualFocus, setManualFocus] = React.useState<WorkoutFocus | null>(null);
+  const { durationMin, warmupMin, cooldownMin, manualFocus, hasStarted } = trainerSettings;
+  const updateTrainerSettings = (nextSettings: Partial<TrainerSessionSettings>) => {
+    onChangeTrainerSettings({
+      ...trainerSettings,
+      ...nextSettings
+    });
+  };
   const suggestion = buildDailySuggestion(
     sessions,
     machines,
@@ -99,7 +122,7 @@ export function HomeScreen({
                 key={option}
                 onPress={() => {
                   triggerTapHaptic();
-                  setDurationMin(option);
+                  updateTrainerSettings({ durationMin: option, hasStarted: false });
                 }}
                 style={[styles.durationButton, isActive ? styles.durationButtonActive : null]}
               >
@@ -125,7 +148,7 @@ export function HomeScreen({
                 key={option}
                 onPress={() => {
                   triggerTapHaptic();
-                  setWarmupMin(option);
+                  updateTrainerSettings({ warmupMin: option, hasStarted: false });
                 }}
                 style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
               >
@@ -151,7 +174,7 @@ export function HomeScreen({
                 key={option}
                 onPress={() => {
                   triggerTapHaptic();
-                  setCooldownMin(option);
+                  updateTrainerSettings({ cooldownMin: option, hasStarted: false });
                 }}
                 style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
               >
@@ -189,10 +212,22 @@ export function HomeScreen({
         </View>
         <Text style={styles.coachNote}>{suggestion.coachNote}</Text>
         <Text style={styles.strategyText}>Strategia: {trainerPlan.strategy}</Text>
+        <View style={styles.startSummary}>
+          <Text style={styles.startSummaryTitle}>
+            Na dnesny trening mas cca {trainerPlan.exercises.length} cviceni
+          </Text>
+          <Text style={styles.startSummaryText}>
+            Celkovy cas: {durationMin} min | rozcvicka {warmupMin} min | odhad planu{" "}
+            {trainerPlan.estimatedDurationMinutes} min
+          </Text>
+        </View>
         <Pressable
           onPress={() => {
             triggerTapHaptic();
-            setManualFocus(getNextFocus(suggestion.focus));
+            updateTrainerSettings({
+              manualFocus: getNextFocus(suggestion.focus),
+              hasStarted: false
+            });
             setExpandedWhyId(null);
           }}
           style={styles.newPlanButton}
@@ -203,8 +238,29 @@ export function HomeScreen({
               : "ruky + hrudnik + ramena"}
           </Text>
         </Pressable>
+        <Pressable
+          onPress={() => {
+            triggerTapHaptic();
+            updateTrainerSettings({ hasStarted: true });
+          }}
+          style={[styles.startWorkoutButton, hasStarted ? styles.startWorkoutButtonActive : null]}
+        >
+          <Text style={styles.startWorkoutButtonText}>
+            {hasStarted ? "Trening spusteny" : "Start treningu"}
+          </Text>
+        </Pressable>
       </SectionCard>
 
+      {!hasStarted ? (
+        <View style={styles.lockedPlanCard}>
+          <Text style={styles.lockedPlanTitle}>Stroje ukazem az po starte</Text>
+          <Text style={styles.lockedPlanText}>
+            Najprv si nastav cas a rozcvicku. Potom stlac Start treningu a ideme
+            makat, nie listovat ako v katalogu nabytku.
+          </Text>
+        </View>
+      ) : (
+        <>
       <SectionCard
         title="Co viem z historie"
         subtitle="Toto je zaklad, z ktoreho trener sklada navrh."
@@ -224,22 +280,26 @@ export function HomeScreen({
         </Text>
       </SectionCard>
 
-      <SectionCard
-        title="Rozcvicka"
-        subtitle="Prvych par minut priprav telo, potom chod na cviky."
-      >
-        <View style={styles.tipStack}>
-          {suggestion.warmup.map((item) => (
-            <Text key={item} style={styles.tipText}>
-              - {item}
-            </Text>
-          ))}
-        </View>
-      </SectionCard>
+          <SectionCard
+            title="Rozcvicka"
+            subtitle="Prvy bod treningu. Oznac ako hotove, aby bola rozcvicka aj v historii."
+          >
+            <RoutineTaskCard
+              durationMin={warmupMin}
+              isCompleted={completedTodayMachineIds.has(WARMUP_ROUTINE_MACHINE_ID)}
+              items={suggestion.warmup}
+              machineId={WARMUP_ROUTINE_MACHINE_ID}
+              note={`Rozcvicka: ${suggestion.warmup.join(" | ")}`}
+              onCompleteRoutine={onCompleteRoutine}
+              orderLabel="1. Start"
+              styles={styles}
+              title="Rozcvicka pred treningom"
+            />
+          </SectionCard>
 
-      <SectionCard
-        title="Cviky na dnes"
-        subtitle="Poradie nie je nahodne. Trener strieda zataz, partie a prida aj nieco nove."
+          <SectionCard
+            title="Cviky na dnes"
+            subtitle="Poradie nie je nahodne. Trener strieda zataz, partie a prida aj nieco nove."
       >
         <View style={styles.machineStack}>
           {trainerPlan.exercises.map((exercise) => {
@@ -250,9 +310,9 @@ export function HomeScreen({
               key={exercise.machine.id}
               style={[styles.machineCard, isCompleted ? styles.machineCardCompleted : null]}
             >
-              <View style={styles.machineMeta}>
-                <View style={styles.exerciseTopRow}>
-                  <Tag label={`${exercise.order}. ${exercise.muscleGroup}`} />
+                  <View style={styles.machineMeta}>
+                    <View style={styles.exerciseTopRow}>
+                      <Tag label={`${exercise.order + 1}. ${exercise.muscleGroup}`} />
                   <View style={styles.exerciseBadges}>
                     {isCompleted ? (
                       <Text style={styles.completedLabel}>✓ Hotovo</Text>
@@ -303,18 +363,24 @@ export function HomeScreen({
         </Text>
       </SectionCard>
 
-      <SectionCard
-        title="Schladenie"
-        subtitle="Kratky koniec po treningu."
-      >
-        <View style={styles.tipStack}>
-          {suggestion.cooldown.map((item) => (
-            <Text key={item} style={styles.tipText}>
-              - {item}
-            </Text>
-          ))}
-        </View>
-      </SectionCard>
+          <SectionCard
+            title="Schladenie"
+            subtitle="Posledny bod treningu. Zapise sa do historie rovnako ako cviky."
+          >
+            <RoutineTaskCard
+              durationMin={cooldownMin}
+              isCompleted={completedTodayMachineIds.has(COOLDOWN_ROUTINE_MACHINE_ID)}
+              items={suggestion.cooldown}
+              machineId={COOLDOWN_ROUTINE_MACHINE_ID}
+              note={`Schladenie: ${suggestion.cooldown.join(" | ")}`}
+              onCompleteRoutine={onCompleteRoutine}
+              orderLabel={`${trainerPlan.exercises.length + 2}. Koniec`}
+              styles={styles}
+              title="Schladenie po treningu"
+            />
+          </SectionCard>
+        </>
+      )}
 
       <SectionCard
         title="Posledny trening"
@@ -382,6 +448,67 @@ function ExerciseRestBlock({
         </Text>
       </Pressable>
       {isWhyOpen ? <Text style={styles.restWhyText}>{exercise.whyRest}</Text> : null}
+    </View>
+  );
+}
+
+function RoutineTaskCard({
+  durationMin,
+  isCompleted,
+  items,
+  machineId,
+  note,
+  onCompleteRoutine,
+  orderLabel,
+  styles,
+  title
+}: {
+  durationMin: number;
+  isCompleted: boolean;
+  items: string[];
+  machineId: string;
+  note: string;
+  onCompleteRoutine: (input: {
+    machineId: string;
+    durationMin: number;
+    note: string;
+  }) => void;
+  orderLabel: string;
+  styles: ReturnType<typeof createStyles>;
+  title: string;
+}) {
+  return (
+    <View style={[styles.routineCard, isCompleted ? styles.routineCardCompleted : null]}>
+      <View style={styles.exerciseTopRow}>
+        <Tag label={orderLabel} />
+        {isCompleted ? <Text style={styles.completedLabel}>✓ Hotovo</Text> : null}
+      </View>
+      <Text style={styles.machineName}>{title}</Text>
+      <View style={styles.routineMetaRow}>
+        <Text style={styles.routineMeta}>Cas: {durationMin} min</Text>
+        <Text style={styles.routineMeta}>Zapise sa do historie</Text>
+      </View>
+      <View style={styles.tipStack}>
+        {items.map((item) => (
+          <Text key={item} style={styles.tipText}>
+            - {item}
+          </Text>
+        ))}
+      </View>
+      <Pressable
+        onPress={() => {
+          triggerTapHaptic();
+          onCompleteRoutine({ machineId, durationMin, note });
+        }}
+        style={[
+          styles.openMachineButton,
+          isCompleted ? styles.routineDoneButton : null
+        ]}
+      >
+        <Text style={styles.openMachineButtonText}>
+          {isCompleted ? "Upravit zapis ako hotove" : "Oznacit ako hotove"}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -470,6 +597,25 @@ function createStyles(colors: AppColors) {
     color: colors.textMuted,
     fontWeight: "700"
   },
+  startSummary: {
+    marginTop: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.14)",
+    padding: 14,
+    gap: 5
+  },
+  startSummaryTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  startSummaryText: {
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20
+  },
   newPlanButton: {
     marginTop: 16,
     backgroundColor: colors.highlight,
@@ -482,6 +628,43 @@ function createStyles(colors: AppColors) {
     color: colors.onAccent,
     fontSize: 15,
     fontWeight: "900"
+  },
+  startWorkoutButton: {
+    marginTop: 10,
+    backgroundColor: colors.accent,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.accent
+  },
+  startWorkoutButtonActive: {
+    backgroundColor: colors.success,
+    borderColor: colors.success
+  },
+  startWorkoutButtonText: {
+    color: colors.onAccent,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  lockedPlanCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.accentSoft,
+    padding: 18,
+    gap: 8
+  },
+  lockedPlanTitle: {
+    color: colors.text,
+    fontSize: 19,
+    fontWeight: "900"
+  },
+  lockedPlanText: {
+    color: colors.textMuted,
+    fontSize: 15,
+    lineHeight: 23
   },
   dataPill: {
     alignSelf: "flex-start",
@@ -506,6 +689,32 @@ function createStyles(colors: AppColors) {
     fontSize: 15,
     lineHeight: 23,
     color: colors.text
+  },
+  routineCard: {
+    backgroundColor: colors.inputSurface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    padding: 16,
+    gap: 10
+  },
+  routineCardCompleted: {
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.1)"
+  },
+  routineMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  routineMeta: {
+    borderRadius: 999,
+    backgroundColor: colors.highlightSoft,
+    color: colors.highlight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    fontWeight: "900"
   },
   machineCard: {
     backgroundColor: colors.inputSurface,
@@ -623,6 +832,9 @@ function createStyles(colors: AppColors) {
     color: colors.onAccent,
     fontSize: 14,
     fontWeight: "900"
+  },
+  routineDoneButton: {
+    backgroundColor: colors.success
   },
   lastSessionSummary: {
     marginTop: 16,

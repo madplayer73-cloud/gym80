@@ -8,9 +8,24 @@ type SideMenuProps = {
   onClose: () => void;
   onClearHistory: () => void;
   hasHistory: boolean;
+  cloudUserEmail?: string;
+  cloudStatus: "loading" | "offline" | "syncing" | "saved" | "error";
+  onGoogleLogin: () => void;
+  onLogout: () => void;
+  onSyncCloud: () => void;
 };
 
-export function SideMenu({ isOpen, onClose, onClearHistory, hasHistory }: SideMenuProps) {
+export function SideMenu({
+  isOpen,
+  onClose,
+  onClearHistory,
+  hasHistory,
+  cloudUserEmail,
+  cloudStatus,
+  onGoogleLogin,
+  onLogout,
+  onSyncCloud
+}: SideMenuProps) {
   const { colors, mode, setMode } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [clearStep, setClearStep] = React.useState(0);
@@ -61,6 +76,57 @@ export function SideMenu({ isOpen, onClose, onClearHistory, hasHistory }: SideMe
                 Dark
               </Text>
             </Pressable>
+          </View>
+
+          <View style={styles.cloudBox}>
+            <Text style={styles.cloudTitle}>Cloud a prihlasenie</Text>
+            <Text style={styles.cloudText}>
+              {cloudUserEmail
+                ? `Prihlaseny: ${cloudUserEmail}`
+                : "Po prihlaseni sa treningy ukladaju oddelene pre kazdeho pouzivatela."}
+            </Text>
+            <View style={styles.statusPill}>
+              <View
+                style={[
+                  styles.statusDot,
+                  cloudStatus === "saved" ? styles.statusDotOk : null,
+                  cloudStatus === "error" ? styles.statusDotError : null
+                ]}
+              />
+              <Text style={styles.statusText}>{getCloudStatusLabel(cloudStatus)}</Text>
+            </View>
+            {cloudUserEmail ? (
+              <View style={styles.cloudButtonRow}>
+                <Pressable
+                  onPress={() => {
+                    triggerTapHaptic();
+                    onSyncCloud();
+                  }}
+                  style={styles.cloudButton}
+                >
+                  <Text style={styles.cloudButtonText}>Ulozit do cloudu</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    triggerTapHaptic();
+                    onLogout();
+                  }}
+                  style={styles.cloudSecondaryButton}
+                >
+                  <Text style={styles.cloudSecondaryText}>Odhlasit</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => {
+                  triggerTapHaptic();
+                  onGoogleLogin();
+                }}
+                style={styles.cloudButton}
+              >
+                <Text style={styles.cloudButtonText}>Prihlasit cez Google</Text>
+              </Pressable>
+            )}
           </View>
 
           <View style={styles.dangerBox}>
@@ -181,6 +247,81 @@ function createStyles(colors: AppColors) {
       padding: 14,
       gap: 10
     },
+    cloudBox: {
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceStrong,
+      padding: 14,
+      gap: 10
+    },
+    cloudTitle: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: "900"
+    },
+    cloudText: {
+      color: colors.textMuted,
+      fontSize: 13,
+      lineHeight: 19
+    },
+    statusPill: {
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderRadius: 999,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 7
+    },
+    statusDot: {
+      width: 9,
+      height: 9,
+      borderRadius: 99,
+      backgroundColor: colors.textMuted
+    },
+    statusDotOk: {
+      backgroundColor: colors.success
+    },
+    statusDotError: {
+      backgroundColor: "#d9534f"
+    },
+    statusText: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: "800"
+    },
+    cloudButtonRow: {
+      gap: 8
+    },
+    cloudButton: {
+      alignItems: "center",
+      borderRadius: 15,
+      backgroundColor: colors.highlight,
+      paddingHorizontal: 12,
+      paddingVertical: 12
+    },
+    cloudButtonText: {
+      color: colors.onAccent,
+      fontWeight: "900",
+      textAlign: "center"
+    },
+    cloudSecondaryButton: {
+      alignItems: "center",
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10
+    },
+    cloudSecondaryText: {
+      color: colors.text,
+      fontWeight: "900"
+    },
     dangerTitle: {
       color: colors.text,
       fontSize: 15,
@@ -231,6 +372,26 @@ function createStyles(colors: AppColors) {
       fontWeight: "900"
     }
   });
+}
+
+function getCloudStatusLabel(status: SideMenuProps["cloudStatus"]) {
+  if (status === "loading") {
+    return "Kontrolujem prihlasenie";
+  }
+
+  if (status === "syncing") {
+    return "Synchronizujem";
+  }
+
+  if (status === "saved") {
+    return "Cloud ulozeny";
+  }
+
+  if (status === "error") {
+    return "Cloud chyba";
+  }
+
+  return "Iba lokalne";
 }
 
 function getClearHistoryLabel(step: number, hasHistory: boolean) {

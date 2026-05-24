@@ -35,7 +35,7 @@ export type ExerciseDifficulty = "easy" | "medium" | "hard";
 
 export type Machine = {
   id: string;
-  brand: "Gym80" | "Volne vahy";
+  brand: "Gym80" | "Volne vahy" | "Trener";
   modelName: string;
   displayNameSk: string;
   category: string;

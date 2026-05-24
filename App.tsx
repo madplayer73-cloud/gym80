@@ -1,15 +1,22 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BottomNav } from "./src/components/BottomNav";
 import { SideMenu } from "./src/components/SideMenu";
 import { CameraPrepScreen } from "./src/screens/CameraPrepScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
-import { HomeScreen } from "./src/screens/HomeScreen";
+import { HomeScreen, TrainerSessionSettings } from "./src/screens/HomeScreen";
 import { MachineDetailScreen } from "./src/screens/MachineDetailScreen";
 import { MachinesScreen } from "./src/screens/MachinesScreen";
-import { mockMachines, mockWorkoutSessions } from "./src/data/mockData";
+import { mockMachines } from "./src/data/mockData";
 import {
   AppTab,
   Machine,
@@ -20,10 +27,60 @@ import {
 } from "./src/types";
 import { AppColors, ThemeMode, ThemeProvider, useTheme } from "./src/theme";
 import { buildMotivationMessage } from "./src/utils/motivation";
+import {
+  CloudDataSnapshot,
+  CloudUser,
+  fetchCloudData,
+  getCloudUser,
+  initializeCloudAuth,
+  isProductionWebHost,
+  loginWithGoogle,
+  logoutCloudUser,
+  saveCloudData
+} from "./src/utils/cloudData";
 
 const STORAGE_KEY = "gym80-tracker-sessions";
 const FAVORITES_STORAGE_KEY = "gym80-tracker-favorites";
 const THEME_STORAGE_KEY = "gym80-tracker-theme";
+const CLOUD_DATA_VERSION = 1;
+const WARMUP_ROUTINE_MACHINE_ID = "routine-warmup";
+const COOLDOWN_ROUTINE_MACHINE_ID = "routine-cooldown";
+const routineMachines: Machine[] = [
+  {
+    id: WARMUP_ROUTINE_MACHINE_ID,
+    brand: "Trener",
+    modelName: "Warmup Routine",
+    displayNameSk: "Rozcvicka",
+    category: "Treningova rutina",
+    muscleGroup: "Kardio",
+    imageHint: "Warmup routine before workout",
+    descriptionSk:
+      "Priprava tela pred treningom. Lahke tempo, mobilita a rozcvicovacie serie.",
+    setupNoteLabel: "Cardio",
+    exerciseType: "mobility",
+    difficulty: "easy",
+    estimatedTimeMinutes: 8,
+    recommendedRestMinSec: 0,
+    recommendedRestMaxSec: 0
+  },
+  {
+    id: COOLDOWN_ROUTINE_MACHINE_ID,
+    brand: "Trener",
+    modelName: "Cooldown Routine",
+    displayNameSk: "Schladenie",
+    category: "Treningova rutina",
+    muscleGroup: "Kardio",
+    imageHint: "Cooldown routine after workout",
+    descriptionSk:
+      "Ukludnenie po treningu. Pomale vydychanie a lahke pretiahnutie.",
+    setupNoteLabel: "Cardio",
+    exerciseType: "mobility",
+    difficulty: "easy",
+    estimatedTimeMinutes: 5,
+    recommendedRestMinSec: 0,
+    recommendedRestMaxSec: 0
+  }
+];
 
 function mapMuscleGroupToFocus(muscleGroup?: MuscleGroup): WorkoutFocus {
   if (!muscleGroup) {
@@ -108,6 +165,24 @@ function isWorkoutSession(value: unknown): value is WorkoutSession {
   );
 }
 
+function buildCloudSnapshot({
+  sessions,
+  favoriteMachineIds,
+  themeMode
+}: {
+  sessions: WorkoutSession[];
+  favoriteMachineIds: string[];
+  themeMode: ThemeMode;
+}): CloudDataSnapshot {
+  return {
+    version: CLOUD_DATA_VERSION,
+    updatedAt: new Date().toISOString(),
+    sessions,
+    favoriteMachineIds,
+    themeMode
+  };
+}
+
 export default function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
   const [hasLoadedTheme, setHasLoadedTheme] = useState(false);
@@ -154,20 +229,37 @@ export default function App() {
 }
 
 function AppShell() {
-  const { colors, mode } = useTheme();
+  const { colors, mode, setMode } = useTheme();
   const [activeTab, setActiveTab] = useState<AppTab>("home");
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedMachineSource, setSelectedMachineSource] = useState<"home" | "machines">("machines");
-  const [sessions, setSessions] = useState(mockWorkoutSessions);
+  const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [favoriteMachineIds, setFavoriteMachineIds] = useState<string[]>([]);
+  const [trainerSettings, setTrainerSettings] = useState<TrainerSessionSettings>({
+    durationMin: 60,
+    warmupMin: 8,
+    cooldownMin: 5,
+    manualFocus: null,
+    hasStarted: false
+  });
   const [hasLoadedStoredSessions, setHasLoadedStoredSessions] = useState(false);
   const [hasLoadedStoredFavorites, setHasLoadedStoredFavorites] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<
+    "loading" | "offline" | "syncing" | "saved" | "error"
+  >("loading");
+  const [hasHydratedCloud, setHasHydratedCloud] = useState(false);
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const shouldRequireCloudLogin = isProductionWebHost();
 
   const machineMap = useMemo(
-    () => new Map(mockMachines.map((machine) => [machine.id, machine])),
+    () =>
+      new Map(
+        [...mockMachines, ...routineMachines].map((machine) => [machine.id, machine])
+      ),
     []
   );
 
@@ -232,6 +324,49 @@ function AppShell() {
   };
 
   React.useEffect(() => {
+    let unsubscribe: undefined | (() => void);
+    let isCancelled = false;
+
+    const initializeAuth = async () => {
+      try {
+        const auth = await initializeCloudAuth();
+
+        if (!auth) {
+          setCloudStatus("offline");
+          return;
+        }
+
+        const user = await getCloudUser();
+
+        if (!isCancelled) {
+          setCloudUser(user);
+          setCloudStatus(user ? "syncing" : "offline");
+        }
+
+        unsubscribe = auth.onAuthChange((_event, nextUser) => {
+          setCloudUser((nextUser as CloudUser | null) ?? null);
+          setHasHydratedCloud(false);
+          setCloudStatus(nextUser ? "syncing" : "offline");
+        });
+      } catch (error) {
+        console.log("Cloud auth init failed", error);
+        setCloudStatus("offline");
+      } finally {
+        if (!isCancelled) {
+          setAuthReady(true);
+        }
+      }
+    };
+
+    void initializeAuth();
+
+    return () => {
+      isCancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  React.useEffect(() => {
     const loadStoredSessions = async () => {
       try {
         const rawValue = await AsyncStorage.getItem(STORAGE_KEY);
@@ -274,6 +409,113 @@ function AppShell() {
 
     void loadStoredFavorites();
   }, []);
+
+  React.useEffect(() => {
+    if (!cloudUser) {
+      setHasHydratedCloud(false);
+      return;
+    }
+
+    if (!hasLoadedStoredSessions || !hasLoadedStoredFavorites || hasHydratedCloud) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const hydrateCloudData = async () => {
+      try {
+        setCloudStatus("syncing");
+        const cloudData = await fetchCloudData();
+
+        if (isCancelled) {
+          return;
+        }
+
+        if (cloudData?.sessions?.every(isWorkoutSession)) {
+          setSessions(cloudData.sessions);
+          setFavoriteMachineIds(
+            Array.isArray(cloudData.favoriteMachineIds)
+              ? cloudData.favoriteMachineIds.filter((item) => typeof item === "string")
+              : []
+          );
+
+          if (cloudData.themeMode === "light" || cloudData.themeMode === "dark") {
+            setMode(cloudData.themeMode);
+          }
+
+          setToastMessage("Cloud zaloha nacitana");
+        } else {
+          await saveCloudData(
+            buildCloudSnapshot({
+              sessions,
+              favoriteMachineIds,
+              themeMode: mode
+            })
+          );
+          setToastMessage("Cloud zaloha vytvorena");
+        }
+
+        setHasHydratedCloud(true);
+        setCloudStatus("saved");
+      } catch (error) {
+        console.log("Cloud hydrate failed", error);
+        setCloudStatus("error");
+        setToastMessage("Cloud synchronizacia zatial nejde");
+      }
+    };
+
+    void hydrateCloudData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    cloudUser,
+    favoriteMachineIds,
+    hasHydratedCloud,
+    hasLoadedStoredFavorites,
+    hasLoadedStoredSessions,
+    mode,
+    sessions,
+    setMode
+  ]);
+
+  React.useEffect(() => {
+    if (
+      !cloudUser ||
+      !hasHydratedCloud ||
+      !hasLoadedStoredSessions ||
+      !hasLoadedStoredFavorites
+    ) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setCloudStatus("syncing");
+      saveCloudData(
+        buildCloudSnapshot({
+          sessions,
+          favoriteMachineIds,
+          themeMode: mode
+        })
+      )
+        .then(() => setCloudStatus("saved"))
+        .catch((error) => {
+          console.log("Cloud save failed", error);
+          setCloudStatus("error");
+        });
+    }, 900);
+
+    return () => clearTimeout(timeout);
+  }, [
+    cloudUser,
+    favoriteMachineIds,
+    hasHydratedCloud,
+    hasLoadedStoredFavorites,
+    hasLoadedStoredSessions,
+    mode,
+    sessions
+  ]);
 
   React.useEffect(() => {
     if (!hasLoadedStoredSessions) {
@@ -405,6 +647,74 @@ function AppShell() {
     setToastMessage(motivationMessage);
   };
 
+  const saveRoutineEntry = ({
+    machineId,
+    durationMin,
+    note
+  }: {
+    machineId: string;
+    durationMin: number;
+    note: string;
+  }) => {
+    const now = new Date();
+    const workoutDate = now.toISOString();
+    const newEntry = {
+      id: `entry-${machineId}-${now.getTime()}`,
+      machineId,
+      durationMin,
+      feeling: "akurat" as WorkoutFeeling,
+      note,
+      completedAt: workoutDate
+    };
+
+    setSessions((currentSessions) => {
+      const todayKey = workoutDate.slice(0, 10);
+      const existingToday = currentSessions.find(
+        (session) => session.workoutDate.slice(0, 10) === todayKey
+      );
+
+      if (existingToday) {
+        const alreadyExists = existingToday.entries.some(
+          (entry) => entry.machineId === machineId
+        );
+        const updatedEntries = alreadyExists
+          ? existingToday.entries.map((entry) =>
+              entry.machineId === machineId ? newEntry : entry
+            )
+          : [...existingToday.entries, newEntry];
+        const updatedFocus = getSessionFocus(updatedEntries, machineMap);
+
+        return currentSessions.map((session) =>
+          session.id === existingToday.id
+            ? {
+                ...session,
+                focus: updatedFocus,
+                coachSummary: buildSessionSummary(updatedFocus, updatedEntries.length),
+                entries: updatedEntries
+              }
+            : session
+        );
+      }
+
+      const newFocus = getSessionFocus([newEntry], machineMap);
+      const newSession = {
+        id: `session-${todayKey}`,
+        workoutDate,
+        focus: newFocus,
+        coachSummary: buildSessionSummary(newFocus, 1),
+        entries: [newEntry]
+      };
+
+      return [newSession, ...currentSessions];
+    });
+
+    setToastMessage(
+      machineId === WARMUP_ROUTINE_MACHINE_ID
+        ? "🔥 Rozcvicka hotova. Motor bezi, teraz ideme na zelezo."
+        : "🧘 Schladenie hotove. Svaly podakovali, ego nech si sadne."
+    );
+  };
+
   const toggleFavoriteMachine = (machineId: string) => {
     setFavoriteMachineIds((currentIds) => {
       if (currentIds.includes(machineId)) {
@@ -465,6 +775,52 @@ function AppShell() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    try {
+      await loginWithGoogle();
+    } catch (error) {
+      console.log("Google login failed", error);
+      setToastMessage("Google prihlasenie sa nepodarilo");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logoutCloudUser();
+      setCloudUser(null);
+      setHasHydratedCloud(false);
+      setCloudStatus("offline");
+      setToastMessage("Odhlasene");
+    } catch (error) {
+      console.log("Logout failed", error);
+      setToastMessage("Odhlasenie sa nepodarilo");
+    }
+  };
+
+  const handleManualCloudSync = async () => {
+    if (!cloudUser) {
+      setToastMessage("Najprv sa prihlas cez Google");
+      return;
+    }
+
+    try {
+      setCloudStatus("syncing");
+      await saveCloudData(
+        buildCloudSnapshot({
+          sessions,
+          favoriteMachineIds,
+          themeMode: mode
+        })
+      );
+      setCloudStatus("saved");
+      setToastMessage("Cloud zaloha ulozena");
+    } catch (error) {
+      console.log("Manual cloud sync failed", error);
+      setCloudStatus("error");
+      setToastMessage("Cloud ulozenie sa nepodarilo");
+    }
+  };
+
   let content = null;
 
   if (activeTab === "home") {
@@ -472,6 +828,9 @@ function AppShell() {
       <HomeScreen
         machines={mockMachines}
         sessions={sessions}
+        trainerSettings={trainerSettings}
+        onChangeTrainerSettings={setTrainerSettings}
+        onCompleteRoutine={saveRoutineEntry}
         onOpenMachine={(machine) => openMachine(machine, "home")}
       />
     );
@@ -527,6 +886,25 @@ function AppShell() {
     );
   }
 
+  if (shouldRequireCloudLogin && !authReady) {
+    return (
+      <AuthGate
+        colors={colors}
+        isLoading
+        onGoogleLogin={handleGoogleLogin}
+      />
+    );
+  }
+
+  if (shouldRequireCloudLogin && !cloudUser) {
+    return (
+      <AuthGate
+        colors={colors}
+        onGoogleLogin={handleGoogleLogin}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ExpoStatusBar style={mode === "dark" ? "light" : "dark"} />
@@ -565,11 +943,53 @@ function AppShell() {
         <BottomNav activeTab={activeTab} onChange={setActiveTab} />
       ) : null}
       <SideMenu
+        cloudStatus={cloudStatus}
+        cloudUserEmail={cloudUser?.email}
         hasHistory={sessions.length > 0}
         isOpen={isMenuOpen}
         onClearHistory={clearWorkoutHistory}
         onClose={() => setIsMenuOpen(false)}
+        onGoogleLogin={handleGoogleLogin}
+        onLogout={handleLogout}
+        onSyncCloud={handleManualCloudSync}
       />
+    </SafeAreaView>
+  );
+}
+
+function AuthGate({
+  colors,
+  isLoading,
+  onGoogleLogin
+}: {
+  colors: AppColors;
+  isLoading?: boolean;
+  onGoogleLogin: () => void;
+}) {
+  const styles = React.useMemo(() => createAuthStyles(colors), [colors]);
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.card}>
+        <Text style={styles.kicker}>VIPGYM TRACKER</Text>
+        <Text style={styles.title}>Najprv sa prihlas</Text>
+        <Text style={styles.copy}>
+          Kazdy pouzivatel bude mat vlastnu historiu treningov a vlastnu cloudovu
+          zalohu. Ked posles link kamaratovi, neuvidi tvoje data.
+        </Text>
+        <Pressable
+          disabled={isLoading}
+          onPress={onGoogleLogin}
+          style={[styles.button, isLoading ? styles.buttonDisabled : null]}
+        >
+          <Text style={styles.buttonText}>
+            {isLoading ? "Pripravujem prihlasenie..." : "Prihlasit cez Google"}
+          </Text>
+        </Pressable>
+        <Text style={styles.note}>
+          Apple prihlasenie pripravime neskor. Teraz ideme stabilny Google zaklad.
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -645,31 +1065,103 @@ function createStyles(colors: AppColors) {
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 104,
-    alignItems: "center"
+    top: 92,
+    alignItems: "center",
+    zIndex: 20,
+    paddingHorizontal: 16
   },
   toastCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    maxWidth: "88%",
-    backgroundColor: "#111111",
+    gap: 12,
+    width: "100%",
+    maxWidth: 560,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.highlight,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 999
+    paddingVertical: 15,
+    borderRadius: 22,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    elevation: 8
   },
   toastDot: {
-    width: 10,
-    height: 10,
+    width: 18,
+    height: 18,
     borderRadius: 999,
-    backgroundColor: "#59c184"
+    backgroundColor: colors.highlight
   },
   toastLabel: {
     flexShrink: 1,
-    color: "#fff8ee",
-    fontWeight: "800",
-    lineHeight: 20
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "900",
+    lineHeight: 22
   }
+  });
+}
+
+function createAuthStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      justifyContent: "center",
+      padding: 22,
+      backgroundColor: colors.page
+    },
+    card: {
+      borderRadius: 30,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      padding: 24,
+      gap: 16,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: 1,
+      shadowRadius: 24,
+      elevation: 8
+    },
+    kicker: {
+      color: colors.highlight,
+      fontSize: 13,
+      fontWeight: "900",
+      letterSpacing: 1.5
+    },
+    title: {
+      color: colors.text,
+      fontSize: 34,
+      fontWeight: "900",
+      lineHeight: 40
+    },
+    copy: {
+      color: colors.textMuted,
+      fontSize: 17,
+      lineHeight: 25
+    },
+    button: {
+      marginTop: 8,
+      borderRadius: 18,
+      backgroundColor: colors.highlight,
+      paddingVertical: 16,
+      alignItems: "center"
+    },
+    buttonDisabled: {
+      opacity: 0.6
+    },
+    buttonText: {
+      color: colors.onAccent,
+      fontSize: 17,
+      fontWeight: "900"
+    },
+    note: {
+      color: colors.textMuted,
+      fontSize: 13,
+      lineHeight: 19
+    }
   });
 }
 

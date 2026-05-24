@@ -241,10 +241,16 @@ export function HistoryScreen({
               {session.entries.map((entry, entryIndex) => {
                 const machine = getMachine(entry.machineId);
                 const isCardio = machine?.muscleGroup === "Kardio";
+                const isRoutine =
+                  isCardio &&
+                  typeof entry.durationMin === "number" &&
+                  typeof entry.speedKph !== "number";
                 const primaryMeta = isCardio
                   ? `${entry.durationMin ?? 0} min`
                   : `${entry.weightKg ?? 0} kg`;
-                const secondaryMeta = isCardio
+                const secondaryMeta = isRoutine
+                  ? "treningova rutina"
+                  : isCardio
                   ? `${entry.speedKph ?? 0} km/h - sklon ${entry.inclinePercent ?? 0} %`
                   : `${entry.sets ?? 0} serie - ${entry.reps ?? 0} opakovani`;
 
