@@ -108,6 +108,19 @@ export type Machine = {
   contraFlags?: string[];
 };
 
+export type TrainingSetLog = {
+  id: string;
+  setNumber: number;
+  weightKg?: number;
+  reps?: number;
+  rpe?: number;
+  painLocation?: ReadinessPain;
+  painLevel?: number;
+  restSecondsUsed?: number;
+  completed: boolean;
+  completedAt?: string;
+};
+
 export type WorkoutEntry = {
   id: string;
   machineId: string;
@@ -122,6 +135,7 @@ export type WorkoutEntry = {
   rpe?: number;
   painLocation?: ReadinessPain;
   painLevel?: number;
+  setLogs?: TrainingSetLog[];
   note?: string;
   completedAt: string;
 };
@@ -132,4 +146,18 @@ export type WorkoutSession = {
   focus: WorkoutFocus;
   coachSummary: string;
   entries: WorkoutEntry[];
+};
+
+export type UserExerciseProfile = {
+  machineId: string;
+  isFavorite?: boolean;
+  doNotRecommend?: boolean;
+  growthPriority?: 0 | 1 | 2 | 3;
+  blockedUntil?: string;
+  blockedReason?: string;
+  lastPainLevel?: number;
+  lastPainLocation?: ReadinessPain;
+  lastRpe?: number;
+  lastRestSeconds?: number;
+  updatedAt: string;
 };

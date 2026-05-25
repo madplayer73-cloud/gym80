@@ -22,6 +22,9 @@ import {
   Machine,
   MuscleGroup,
   ReadinessCheck,
+  ReadinessPain,
+  TrainingSetLog,
+  UserExerciseProfile,
   WorkoutFeeling,
   WorkoutFocus,
   WorkoutSession
@@ -46,6 +49,7 @@ import {
 const STORAGE_KEY = "gym80-tracker-sessions";
 const FAVORITES_STORAGE_KEY = "gym80-tracker-favorites";
 const THEME_STORAGE_KEY = "gym80-tracker-theme";
+const USER_EXERCISE_PROFILES_STORAGE_KEY = "gym80-tracker-user-exercise-profiles";
 const CLOUD_DATA_VERSION = 1;
 const WARMUP_ROUTINE_MACHINE_ID = "routine-warmup";
 const COOLDOWN_ROUTINE_MACHINE_ID = "routine-cooldown";
@@ -169,13 +173,29 @@ function isWorkoutSession(value: unknown): value is WorkoutSession {
   );
 }
 
+function isUserExerciseProfiles(value: unknown): value is Record<string, UserExerciseProfile> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value as Record<string, UserExerciseProfile>).every(
+    (profile) =>
+      profile &&
+      typeof profile === "object" &&
+      typeof profile.machineId === "string" &&
+      typeof profile.updatedAt === "string"
+  );
+}
+
 function buildCloudSnapshot({
   sessions,
   favoriteMachineIds,
+  userExerciseProfiles,
   themeMode
 }: {
   sessions: WorkoutSession[];
   favoriteMachineIds: string[];
+  userExerciseProfiles: Record<string, UserExerciseProfile>;
   themeMode: ThemeMode;
 }): CloudDataSnapshot {
   return {
@@ -183,6 +203,7 @@ function buildCloudSnapshot({
     updatedAt: new Date().toISOString(),
     sessions,
     favoriteMachineIds,
+    userExerciseProfiles,
     themeMode
   };
 }
@@ -239,6 +260,9 @@ function AppShell() {
   const [selectedMachineSource, setSelectedMachineSource] = useState<"home" | "machines">("machines");
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [favoriteMachineIds, setFavoriteMachineIds] = useState<string[]>([]);
+  const [userExerciseProfiles, setUserExerciseProfiles] = useState<
+    Record<string, UserExerciseProfile>
+  >({});
   const [trainerSettings, setTrainerSettings] = useState<TrainerSessionSettings>({
     durationMin: 60,
     warmupMin: 8,
@@ -255,6 +279,7 @@ function AppShell() {
   });
   const [hasLoadedStoredSessions, setHasLoadedStoredSessions] = useState(false);
   const [hasLoadedStoredFavorites, setHasLoadedStoredFavorites] = useState(false);
+  const [hasLoadedStoredProfiles, setHasLoadedStoredProfiles] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showAuthExport, setShowAuthExport] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -305,12 +330,13 @@ function AppShell() {
           app: "gym80-tracker",
           version: 1,
           exportedAt: new Date().toISOString(),
-          sessions
+          sessions,
+          userExerciseProfiles
         },
         null,
         2
       ),
-    [sessions]
+    [sessions, userExerciseProfiles]
   );
 
   const openMachine = (machine: Machine, source: "home" | "machines" = "machines") => {
@@ -423,12 +449,39 @@ function AppShell() {
   }, []);
 
   React.useEffect(() => {
+    const loadStoredProfiles = async () => {
+      try {
+        const rawValue = await AsyncStorage.getItem(USER_EXERCISE_PROFILES_STORAGE_KEY);
+
+        if (rawValue) {
+          const parsed = JSON.parse(rawValue);
+
+          if (isUserExerciseProfiles(parsed)) {
+            setUserExerciseProfiles(parsed);
+          }
+        }
+      } catch (error) {
+        console.log("Failed to load stored exercise profiles", error);
+      } finally {
+        setHasLoadedStoredProfiles(true);
+      }
+    };
+
+    void loadStoredProfiles();
+  }, []);
+
+  React.useEffect(() => {
     if (!cloudUser) {
       setHasHydratedCloud(false);
       return;
     }
 
-    if (!hasLoadedStoredSessions || !hasLoadedStoredFavorites || hasHydratedCloud) {
+    if (
+      !hasLoadedStoredSessions ||
+      !hasLoadedStoredFavorites ||
+      !hasLoadedStoredProfiles ||
+      hasHydratedCloud
+    ) {
       return;
     }
 
@@ -462,12 +515,17 @@ function AppShell() {
             setMode(cloudData.themeMode);
           }
 
+          if (isUserExerciseProfiles(cloudData.userExerciseProfiles)) {
+            setUserExerciseProfiles(cloudData.userExerciseProfiles);
+          }
+
           setToastMessage("Cloud zaloha nacitana");
         } else {
           await saveCloudData(
             buildCloudSnapshot({
               sessions,
               favoriteMachineIds,
+              userExerciseProfiles,
               themeMode: mode
             })
           );
@@ -493,9 +551,11 @@ function AppShell() {
     favoriteMachineIds,
     hasHydratedCloud,
     hasLoadedStoredFavorites,
+    hasLoadedStoredProfiles,
     hasLoadedStoredSessions,
     mode,
     sessions,
+    userExerciseProfiles,
     setMode
   ]);
 
@@ -504,7 +564,8 @@ function AppShell() {
       !cloudUser ||
       !hasHydratedCloud ||
       !hasLoadedStoredSessions ||
-      !hasLoadedStoredFavorites
+      !hasLoadedStoredFavorites ||
+      !hasLoadedStoredProfiles
     ) {
       return;
     }
@@ -515,6 +576,7 @@ function AppShell() {
         buildCloudSnapshot({
           sessions,
           favoriteMachineIds,
+          userExerciseProfiles,
           themeMode: mode
         })
       )
@@ -531,9 +593,11 @@ function AppShell() {
     favoriteMachineIds,
     hasHydratedCloud,
     hasLoadedStoredFavorites,
+    hasLoadedStoredProfiles,
     hasLoadedStoredSessions,
     mode,
-    sessions
+    sessions,
+    userExerciseProfiles
   ]);
 
   React.useEffect(() => {
@@ -572,6 +636,25 @@ function AppShell() {
   }, [favoriteMachineIds, hasLoadedStoredFavorites]);
 
   React.useEffect(() => {
+    if (!hasLoadedStoredProfiles) {
+      return;
+    }
+
+    const persistProfiles = async () => {
+      try {
+        await AsyncStorage.setItem(
+          USER_EXERCISE_PROFILES_STORAGE_KEY,
+          JSON.stringify(userExerciseProfiles)
+        );
+      } catch (error) {
+        console.log("Failed to store exercise profiles", error);
+      }
+    };
+
+    void persistProfiles();
+  }, [hasLoadedStoredProfiles, userExerciseProfiles]);
+
+  React.useEffect(() => {
     if (!toastMessage) {
       return;
     }
@@ -592,6 +675,11 @@ function AppShell() {
     speedKph,
     inclinePercent,
     feeling,
+    rpe,
+    painLocation,
+    painLevel,
+    restSeconds,
+    setLogs,
     note
   }: {
     machineId: string;
@@ -602,10 +690,33 @@ function AppShell() {
     speedKph?: number;
     inclinePercent?: number;
     feeling?: WorkoutFeeling;
+    rpe?: number;
+    painLocation?: ReadinessPain;
+    painLevel?: number;
+    restSeconds?: number;
+    setLogs?: TrainingSetLog[];
     note: string;
   }) => {
     const now = new Date();
     const workoutDate = now.toISOString();
+    const maxSetPain = setLogs?.reduce(
+      (max, setLog) => Math.max(max, setLog.painLevel ?? 0),
+      0
+    );
+    const effectivePainLevel = Math.max(painLevel ?? 0, maxSetPain ?? 0);
+    const effectivePainLocation =
+      effectivePainLevel > 0 ? painLocation ?? "ine" : painLocation;
+    const rpeSetLogs = setLogs?.filter((setLog) => typeof setLog.rpe === "number") ?? [];
+    const averageSetRpe = rpeSetLogs.length
+      ? Math.round(
+          (rpeSetLogs.reduce((sum, setLog) => sum + (setLog.rpe ?? 0), 0) /
+            rpeSetLogs.length) *
+            10
+        ) / 10
+      : undefined;
+    const effectiveRpe = rpe ?? (Number.isFinite(averageSetRpe) ? averageSetRpe : undefined);
+    const effectiveFeeling =
+      effectivePainLevel >= 5 ? ("bolest" as WorkoutFeeling) : feeling;
     const newEntry = {
       id: `entry-${machineId}-${now.getTime()}`,
       machineId,
@@ -615,7 +726,12 @@ function AppShell() {
       durationMin,
       speedKph,
       inclinePercent,
-      feeling,
+      feeling: effectiveFeeling,
+      rpe: effectiveRpe,
+      painLocation: effectivePainLocation,
+      painLevel: effectivePainLevel,
+      restSeconds,
+      setLogs,
       note,
       completedAt: workoutDate
     };
@@ -669,6 +785,31 @@ function AppShell() {
 
     setActiveTab(selectedMachineSource === "home" ? "home" : "machines");
     setToastMessage(motivationMessage);
+
+    setUserExerciseProfiles((currentProfiles) => {
+      const previousProfile = currentProfiles[machineId];
+      const shouldBlock = effectivePainLevel >= 5;
+      const blockedUntil = shouldBlock
+        ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : previousProfile?.blockedUntil;
+
+      return {
+        ...currentProfiles,
+        [machineId]: {
+          ...previousProfile,
+          machineId,
+          blockedUntil,
+          blockedReason: shouldBlock
+            ? "Bolest 5/10 alebo viac. Trener tento cvik 7 dni nebude odporucat."
+            : previousProfile?.blockedReason,
+          lastPainLevel: effectivePainLevel,
+          lastPainLocation: effectivePainLocation,
+          lastRpe: effectiveRpe,
+          lastRestSeconds: restSeconds,
+          updatedAt: workoutDate
+        }
+      };
+    });
   };
 
   const saveRoutineEntry = ({
@@ -743,10 +884,28 @@ function AppShell() {
     setFavoriteMachineIds((currentIds) => {
       if (currentIds.includes(machineId)) {
         setToastMessage("Odstranene z oblubenych");
+        setUserExerciseProfiles((currentProfiles) => ({
+          ...currentProfiles,
+          [machineId]: {
+            ...currentProfiles[machineId],
+            machineId,
+            isFavorite: false,
+            updatedAt: new Date().toISOString()
+          }
+        }));
         return currentIds.filter((id) => id !== machineId);
       }
 
       setToastMessage("Pridane medzi oblubene");
+      setUserExerciseProfiles((currentProfiles) => ({
+        ...currentProfiles,
+        [machineId]: {
+          ...currentProfiles[machineId],
+          machineId,
+          isFavorite: true,
+          updatedAt: new Date().toISOString()
+        }
+      }));
       return [machineId, ...currentIds];
     });
   };
@@ -777,6 +936,7 @@ function AppShell() {
 
   const clearWorkoutHistory = () => {
     setSessions([]);
+    setUserExerciseProfiles({});
     setToastMessage("Historia zmazana");
   };
 
@@ -791,6 +951,9 @@ function AppShell() {
       }
 
       setSessions(importedSessions);
+      if (isUserExerciseProfiles(parsed?.userExerciseProfiles)) {
+        setUserExerciseProfiles(parsed.userExerciseProfiles);
+      }
       setToastMessage("Historia importovana");
       return true;
     } catch (error) {
@@ -830,12 +993,13 @@ function AppShell() {
     try {
       setCloudStatus("syncing");
       await saveCloudData(
-        buildCloudSnapshot({
-          sessions,
-          favoriteMachineIds,
-          themeMode: mode
-        })
-      );
+            buildCloudSnapshot({
+              sessions,
+              favoriteMachineIds,
+              userExerciseProfiles,
+              themeMode: mode
+            })
+          );
       setCloudStatus("saved");
       setToastMessage("Cloud zaloha ulozena");
     } catch (error) {
@@ -853,6 +1017,7 @@ function AppShell() {
         machines={mockMachines}
         sessions={sessions}
         trainerSettings={trainerSettings}
+        userExerciseProfiles={userExerciseProfiles}
         onChangeTrainerSettings={setTrainerSettings}
         onCompleteRoutine={saveRoutineEntry}
         onOpenMachine={(machine) => openMachine(machine, "home")}
@@ -891,6 +1056,7 @@ function AppShell() {
           (entry) => entry.machine?.id === selectedMachine.id
         )}
         machine={selectedMachine}
+        userExerciseProfile={userExerciseProfiles[selectedMachine.id]}
         isFavorite={favoriteMachineIds.includes(selectedMachine.id)}
         onBack={navigateBackFromMachine}
         onBackToPlan={selectedMachineSource === "home" ? navigateBackToPlan : undefined}

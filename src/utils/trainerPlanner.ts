@@ -8,6 +8,7 @@ import {
   ReadinessPain,
   MuscleGroup,
   RomBias,
+  UserExerciseProfile,
   WorkoutFocus,
   WorkoutSession
 } from "../types";
@@ -1017,6 +1018,7 @@ function getCandidateScore(
   selectedIds: Set<string>,
   weeklyState: WeeklyTrainingState,
   sessions: WorkoutSession[],
+  userExerciseProfiles: Record<string, UserExerciseProfile> | undefined,
   readiness: ReadinessCheck,
   readinessBand: ReadinessBand,
   recentPainByJoint: Record<string, number>,
@@ -1026,10 +1028,26 @@ function getCandidateScore(
     return -9999;
   }
 
+  const profile = userExerciseProfiles?.[machine.id];
+
+  if (profile?.doNotRecommend) {
+    return -9999;
+  }
+
+  if (profile?.blockedUntil) {
+    const blockedUntilTime = new Date(profile.blockedUntil).getTime();
+
+    if (!Number.isNaN(blockedUntilTime) && blockedUntilTime > Date.now()) {
+      return -9999;
+    }
+  }
+
   const count = useCounts.get(machine.id) ?? 0;
   const meta = inferMachineMeta(machine);
   const familiarityScore = Math.min(count, 4) * 2;
   const discoveryScore = count <= 1 ? 4 : 0;
+  const profileScore =
+    (profile?.isFavorite ? 4 : 0) + (profile?.growthPriority ?? 0) * 5;
   const weeklyNeedScore = getWeeklyNeedScore(meta, weeklyState);
   const readinessCompatibilityScore =
     readinessBand === "vysoka" && meta.fatigueCost === "high"
@@ -1059,6 +1077,7 @@ function getCandidateScore(
     weeklyNeedScore +
     familiarityScore +
     discoveryScore +
+    profileScore +
     readinessCompatibilityScore +
     recencyBonus -
     painPenalty -
@@ -1079,6 +1098,7 @@ function pickMachine({
   preferDiscovery,
   weeklyState,
   sessions,
+  userExerciseProfiles,
   readiness,
   readinessBand,
   recentPainByJoint,
@@ -1093,6 +1113,7 @@ function pickMachine({
   preferDiscovery: boolean;
   weeklyState: WeeklyTrainingState;
   sessions: WorkoutSession[];
+  userExerciseProfiles?: Record<string, UserExerciseProfile>;
   readiness: ReadinessCheck;
   readinessBand: ReadinessBand;
   recentPainByJoint: Record<string, number>;
@@ -1127,6 +1148,7 @@ function pickMachine({
         selectedIds,
         weeklyState,
         sessions,
+        userExerciseProfiles,
         readiness,
         readinessBand,
         recentPainByJoint,
@@ -1139,6 +1161,7 @@ function pickMachine({
         selectedIds,
         weeklyState,
         sessions,
+        userExerciseProfiles,
         readiness,
         readinessBand,
         recentPainByJoint,
@@ -1263,7 +1286,8 @@ export function generateTrainerPlan({
   warmupMin,
   cooldownMin,
   preferredFocus,
-  readiness = defaultReadiness
+  readiness = defaultReadiness,
+  userExerciseProfiles
 }: {
   sessions: WorkoutSession[];
   machines: Machine[];
@@ -1272,6 +1296,7 @@ export function generateTrainerPlan({
   cooldownMin: number;
   preferredFocus?: WorkoutFocus;
   readiness?: ReadinessCheck;
+  userExerciseProfiles?: Record<string, UserExerciseProfile>;
 }): TrainerWorkoutPlan {
   const machinesById = getMachineMap(machines);
   const focus = preferredFocus ?? chooseFocus(sessions, machinesById);
@@ -1307,6 +1332,7 @@ export function generateTrainerPlan({
       preferDiscovery: shouldDiscover,
       weeklyState: stats.weeklyState,
       sessions,
+      userExerciseProfiles,
       readiness,
       readinessBand,
       recentPainByJoint,

@@ -18,6 +18,7 @@ import {
   ReadinessPain,
   ReadinessSleep,
   ReadinessSoreness,
+  UserExerciseProfile,
   WorkoutFocus,
   WorkoutSession
 } from "../types";
@@ -33,6 +34,7 @@ import { buildDailySuggestion } from "../utils/trainingPlan";
 type HomeScreenProps = {
   machines: Machine[];
   sessions: WorkoutSession[];
+  userExerciseProfiles: Record<string, UserExerciseProfile>;
   onOpenMachine: (machine: Machine) => void;
   trainerSettings: TrainerSessionSettings;
   onChangeTrainerSettings: (settings: TrainerSessionSettings) => void;
@@ -88,6 +90,7 @@ function getNextFocus(currentFocus: WorkoutFocus) {
 export function HomeScreen({
   machines,
   sessions,
+  userExerciseProfiles,
   onOpenMachine,
   trainerSettings,
   onChangeTrainerSettings,
@@ -133,7 +136,8 @@ export function HomeScreen({
     warmupMin,
     cooldownMin,
     preferredFocus: suggestion.focus,
-    readiness
+    readiness,
+    userExerciseProfiles
   });
   const lastSession = sessions[0];
   const [expandedWhyId, setExpandedWhyId] = React.useState<string | null>(null);

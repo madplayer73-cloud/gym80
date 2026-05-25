@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import { ThemeMode } from "../theme";
-import { WorkoutSession } from "../types";
+import { UserExerciseProfile, WorkoutSession } from "../types";
 
 export type CloudUser = {
   id: string;
@@ -16,6 +16,7 @@ export type CloudDataSnapshot = {
   updatedAt: string;
   sessions: WorkoutSession[];
   favoriteMachineIds: string[];
+  userExerciseProfiles?: Record<string, UserExerciseProfile>;
   themeMode?: ThemeMode;
 };
 

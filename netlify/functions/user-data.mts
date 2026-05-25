@@ -7,6 +7,7 @@ type UserDataPayload = {
   updatedAt: string;
   sessions: unknown[];
   favoriteMachineIds: unknown[];
+  userExerciseProfiles?: Record<string, unknown>;
   themeMode?: "light" | "dark";
 };
 
@@ -31,6 +32,10 @@ function isValidPayload(value: unknown): value is UserDataPayload {
     typeof payload.updatedAt === "string" &&
     Array.isArray(payload.sessions) &&
     Array.isArray(payload.favoriteMachineIds) &&
+    (payload.userExerciseProfiles === undefined ||
+      (payload.userExerciseProfiles !== null &&
+        typeof payload.userExerciseProfiles === "object" &&
+        !Array.isArray(payload.userExerciseProfiles))) &&
     (payload.themeMode === undefined ||
       payload.themeMode === "light" ||
       payload.themeMode === "dark")
