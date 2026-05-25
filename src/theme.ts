@@ -21,6 +21,7 @@ export const lightColors = {
   chipText: "#4d2a13",
   onAccent: "#fff8ee",
   success: "#2f7a57",
+  danger: "#b83b2f",
   shadow: "rgba(80, 47, 12, 0.12)"
 };
 
@@ -43,6 +44,7 @@ export const darkColors = {
   chipText: "#f0c99f",
   onAccent: "#12100d",
   success: "#65c18c",
+  danger: "#ff7a6b",
   shadow: "rgba(0, 0, 0, 0.35)"
 };
 

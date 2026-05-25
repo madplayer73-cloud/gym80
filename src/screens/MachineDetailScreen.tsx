@@ -19,6 +19,7 @@ import { getMachineImage } from "../utils/machineImages";
 import {
   getEntryProgressionAdvice,
   getPlannedProgressionAdvice,
+  getTrendProgressionAdvice,
   ProgressionAdviceLevel
 } from "../utils/progressionAdvice";
 import { getMachineTrainingGuidance } from "../utils/trainerPlanner";
@@ -112,11 +113,12 @@ export function MachineDetailScreen({
   const [feeling, setFeeling] = React.useState<WorkoutFeeling>("akurat");
   const [note, setNote] = React.useState("");
   const latestProgressionAdvice = !isCardio
-    ? getEntryProgressionAdvice(latestEntry)
+    ? getTrendProgressionAdvice(entries, machine) ?? getEntryProgressionAdvice(latestEntry)
     : null;
   const plannedProgressionAdvice = !isCardio
     ? getPlannedProgressionAdvice({
         latestEntry,
+        trendAdvice: latestProgressionAdvice,
         plannedWeightKg: Number(weightKg),
         plannedSets: Number(sets),
         plannedReps: Number(reps)
@@ -273,6 +275,11 @@ export function MachineDetailScreen({
             Typ cviku: {translateExerciseType(trainingGuidance.exerciseType)} - narocnost:{" "}
             {translateDifficulty(trainingGuidance.difficulty)}
           </Text>
+          <Text style={styles.restSmallText}>
+            Cielove opakovania: {trainingGuidance.defaultRepMin}-{trainingGuidance.defaultRepMax} |
+            hlavne svaly: {trainingGuidance.primaryMuscles.join(", ")}
+          </Text>
+          <Text style={styles.restSmallText}>Tempo: {trainingGuidance.tempoHint}</Text>
           <Pressable
             onPress={() => {
               triggerTapHaptic();
@@ -335,6 +342,14 @@ export function MachineDetailScreen({
               >
                 <Text style={styles.adviceTitle}>{latestProgressionAdvice.title}</Text>
                 <Text style={styles.adviceText}>{latestProgressionAdvice.message}</Text>
+                {latestProgressionAdvice.confidenceLabel ? (
+                  <Text style={styles.adviceMeta}>
+                    Istota: {latestProgressionAdvice.confidenceLabel}
+                    {latestProgressionAdvice.confidenceScore
+                      ? ` (${latestProgressionAdvice.confidenceScore}/100)`
+                      : ""}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
           </>
@@ -437,10 +452,18 @@ export function MachineDetailScreen({
                   getAdviceCardStyle(styles, plannedProgressionAdvice.level)
                 ]}
               >
-                <Text style={styles.adviceTitle}>{plannedProgressionAdvice.title}</Text>
-                <Text style={styles.adviceText}>{plannedProgressionAdvice.message}</Text>
-              </View>
+            <Text style={styles.adviceTitle}>{plannedProgressionAdvice.title}</Text>
+            <Text style={styles.adviceText}>{plannedProgressionAdvice.message}</Text>
+            {plannedProgressionAdvice.confidenceLabel ? (
+              <Text style={styles.adviceMeta}>
+                Istota: {plannedProgressionAdvice.confidenceLabel}
+                {plannedProgressionAdvice.confidenceScore
+                  ? ` (${plannedProgressionAdvice.confidenceScore}/100)`
+                  : ""}
+              </Text>
             ) : null}
+          </View>
+        ) : null}
             <Text style={styles.fieldLabel}>Navrhovana vaha</Text>
             <View style={styles.weightAdjustRow}>
               <Pressable onPress={() => adjustWeight(-2.5)} style={styles.adjustButton}>
@@ -870,6 +893,14 @@ function createStyles(colors: AppColors) {
     color: colors.text,
     fontSize: 14,
     lineHeight: 21
+  },
+  adviceMeta: {
+    marginTop: 8,
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
   },
   restBox: {
     borderRadius: 18,

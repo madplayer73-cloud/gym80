@@ -10,10 +10,24 @@ import { SectionCard } from "../components/SectionCard";
 import { StatChip } from "../components/StatChip";
 import { Tag } from "../components/Tag";
 import { AppColors, useTheme } from "../theme";
-import { Machine, WorkoutFocus, WorkoutSession } from "../types";
+import {
+  Machine,
+  ReadinessCheck,
+  ReadinessEnergy,
+  ReadinessGoal,
+  ReadinessPain,
+  ReadinessSleep,
+  ReadinessSoreness,
+  WorkoutFocus,
+  WorkoutSession
+} from "../types";
 import { estimateSessionCalories } from "../utils/calories";
 import { triggerTapHaptic } from "../utils/haptics";
-import { generateTrainerPlan, PlannedExercise } from "../utils/trainerPlanner";
+import {
+  defaultReadiness,
+  generateTrainerPlan,
+  PlannedExercise
+} from "../utils/trainerPlanner";
 import { buildDailySuggestion } from "../utils/trainingPlan";
 
 type HomeScreenProps = {
@@ -34,12 +48,36 @@ export type TrainerSessionSettings = {
   warmupMin: number;
   cooldownMin: number;
   manualFocus: WorkoutFocus | null;
+  readiness: ReadinessCheck;
   hasStarted: boolean;
 };
 
 const durationOptions = [60, 90, 120];
 const warmupOptions = [5, 8, 10, 15];
 const cooldownOptions = [3, 5, 8, 10];
+const energyOptions: ReadinessEnergy[] = [1, 2, 3, 4, 5];
+const sleepOptions: Array<{ value: ReadinessSleep; label: string }> = [
+  { value: "slaby", label: "slaby" },
+  { value: "priemerny", label: "priemerny" },
+  { value: "dobry", label: "dobry" }
+];
+const sorenessOptions: Array<{ value: ReadinessSoreness; label: string }> = [
+  { value: "ziadna", label: "ziadna" },
+  { value: "mierna", label: "mierna" },
+  { value: "silna", label: "silna" }
+];
+const painOptions: Array<{ value: ReadinessPain; label: string }> = [
+  { value: "nie", label: "nie" },
+  { value: "koleno", label: "koleno" },
+  { value: "rameno", label: "rameno" },
+  { value: "chrbat", label: "chrbat" }
+];
+const goalOptions: Array<{ value: ReadinessGoal; label: string }> = [
+  { value: "normal", label: "normal" },
+  { value: "lahky", label: "lahsi den" },
+  { value: "silovy", label: "silnejsi den" },
+  { value: "udrzat_rytmus", label: "len udrzat rytmus" }
+];
 const WARMUP_ROUTINE_MACHINE_ID = "routine-warmup";
 const COOLDOWN_ROUTINE_MACHINE_ID = "routine-cooldown";
 
@@ -57,11 +95,27 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
-  const { durationMin, warmupMin, cooldownMin, manualFocus, hasStarted } = trainerSettings;
+  const {
+    durationMin,
+    warmupMin,
+    cooldownMin,
+    manualFocus,
+    readiness = defaultReadiness,
+    hasStarted
+  } = trainerSettings;
   const updateTrainerSettings = (nextSettings: Partial<TrainerSessionSettings>) => {
     onChangeTrainerSettings({
       ...trainerSettings,
       ...nextSettings
+    });
+  };
+  const updateReadiness = (nextReadiness: Partial<ReadinessCheck>) => {
+    updateTrainerSettings({
+      readiness: {
+        ...readiness,
+        ...nextReadiness
+      },
+      hasStarted: false
     });
   };
   const suggestion = buildDailySuggestion(
@@ -78,7 +132,8 @@ export function HomeScreen({
     targetDurationMinutes: durationMin,
     warmupMin,
     cooldownMin,
-    preferredFocus: suggestion.focus
+    preferredFocus: suggestion.focus,
+    readiness
   });
   const lastSession = sessions[0];
   const [expandedWhyId, setExpandedWhyId] = React.useState<string | null>(null);
@@ -192,6 +247,66 @@ export function HomeScreen({
         </View>
       </SectionCard>
 
+      <SectionCard
+        title="Ako sa dnes citis?"
+        subtitle="Toto ovplyvni pocet cvikov, vyber strojov a to, ci trener nebude zbytocne tlacit na progres."
+      >
+        <Text style={styles.optionLabel}>Energia</Text>
+        <View style={styles.durationRow}>
+          {energyOptions.map((option) => {
+            const isActive = option === readiness.energia;
+
+            return (
+              <Pressable
+                key={option}
+                onPress={() => {
+                  triggerTapHaptic();
+                  updateReadiness({ energia: option });
+                }}
+                style={[styles.readinessButton, isActive ? styles.durationButtonActive : null]}
+              >
+                <Text
+                  style={[
+                    styles.durationButtonText,
+                    isActive ? styles.durationButtonTextActive : null
+                  ]}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <ReadinessChoiceRow
+          label="Spanok"
+          options={sleepOptions}
+          selected={readiness.spanok}
+          onSelect={(value) => updateReadiness({ spanok: value })}
+          styles={styles}
+        />
+        <ReadinessChoiceRow
+          label="Svalovica"
+          options={sorenessOptions}
+          selected={readiness.svalovica}
+          onSelect={(value) => updateReadiness({ svalovica: value })}
+          styles={styles}
+        />
+        <ReadinessChoiceRow
+          label="Bolest"
+          options={painOptions}
+          selected={readiness.bolest}
+          onSelect={(value) => updateReadiness({ bolest: value })}
+          styles={styles}
+        />
+        <ReadinessChoiceRow
+          label="Ciel dna"
+          options={goalOptions}
+          selected={readiness.cielDna}
+          onSelect={(value) => updateReadiness({ cielDna: value })}
+          styles={styles}
+        />
+      </SectionCard>
+
       <SectionCard title={suggestion.title} subtitle={suggestion.explanation}>
         <View style={styles.row}>
           <StatChip label="Cas" value={`${suggestion.durationMin} min`} />
@@ -211,6 +326,10 @@ export function HomeScreen({
           </Text>
         </View>
         <Text style={styles.coachNote}>{suggestion.coachNote}</Text>
+        <View style={styles.readinessSummary}>
+          <Text style={styles.readinessSummaryTitle}>Stav dnes: {trainerPlan.readinessBand}</Text>
+          <Text style={styles.readinessSummaryText}>{trainerPlan.readinessSummary}</Text>
+        </View>
         <Text style={styles.strategyText}>Strategia: {trainerPlan.strategy}</Text>
         <View style={styles.startSummary}>
           <Text style={styles.startSummaryTitle}>
@@ -278,6 +397,14 @@ export function HomeScreen({
           {" "}{trainerPlan.stats.occasionalMachines.length} | Este nepouzite:
           {" "}{trainerPlan.stats.neverUsedMachines.length}
         </Text>
+        <Text style={styles.tipText}>
+          Tyzdenny stimul: {trainerPlan.stats.weeklyState.topNeeds.length > 0
+            ? `najviac chyba ${trainerPlan.stats.weeklyState.topNeeds.join(", ")}`
+            : "zatial zbieram data z tohto tyzdna"}
+        </Text>
+        <Text style={styles.tipText}>
+          Unava z tazkych cvikov: {trainerPlan.stats.weeklyState.axialFatigueScore} bodov
+        </Text>
       </SectionCard>
 
           <SectionCard
@@ -334,6 +461,12 @@ export function HomeScreen({
                   }}
                   styles={styles}
                 />
+                <Text style={styles.selectionReason}>
+                  Preco tento cvik: {exercise.selectionReason}
+                </Text>
+                <Text style={styles.selectionReason}>
+                  Tempo: {exercise.tempoHint}
+                </Text>
                 <Text style={styles.machineCategory}>{exercise.machine.descriptionSk}</Text>
                 <Pressable
                   onPress={() => {
@@ -441,7 +574,11 @@ function ExerciseRestBlock({
         </Text>
       ) : null}
       <Text style={styles.restSmallText}>Ciel: rast svalov</Text>
+      <Text style={styles.restSmallText}>
+        Istota odporucania: {exercise.confidenceLabel} ({exercise.confidenceScore}/100)
+      </Text>
       {exercise.note ? <Text style={styles.restNote}>{exercise.note}</Text> : null}
+      {exercise.safetyNote ? <Text style={styles.safetyNote}>{exercise.safetyNote}</Text> : null}
       <Pressable onPress={onToggleWhy} style={styles.restWhyButton}>
         <Text style={styles.restWhyLabel}>
           {isWhyOpen ? "Skryt vysvetlenie" : "Preco takato prestavka?"}
@@ -449,6 +586,51 @@ function ExerciseRestBlock({
       </Pressable>
       {isWhyOpen ? <Text style={styles.restWhyText}>{exercise.whyRest}</Text> : null}
     </View>
+  );
+}
+
+function ReadinessChoiceRow<T extends string>({
+  label,
+  options,
+  selected,
+  onSelect,
+  styles
+}: {
+  label: string;
+  options: Array<{ value: T; label: string }>;
+  selected: T;
+  onSelect: (value: T) => void;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <>
+      <Text style={styles.optionLabel}>{label}</Text>
+      <View style={styles.durationRow}>
+        {options.map((option) => {
+          const isActive = option.value === selected;
+
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => {
+                triggerTapHaptic();
+                onSelect(option.value);
+              }}
+              style={[styles.readinessButton, isActive ? styles.durationButtonActive : null]}
+            >
+              <Text
+                style={[
+                  styles.durationButtonText,
+                  isActive ? styles.durationButtonTextActive : null
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
   );
 }
 
@@ -569,6 +751,14 @@ function createStyles(colors: AppColors) {
     borderRadius: 15,
     backgroundColor: colors.chipSurface
   },
+  readinessButton: {
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: colors.chipSurface,
+    minWidth: 44,
+    alignItems: "center"
+  },
   durationButtonActive: {
     backgroundColor: colors.highlight
   },
@@ -605,6 +795,28 @@ function createStyles(colors: AppColors) {
     backgroundColor: "rgba(47, 122, 87, 0.14)",
     padding: 14,
     gap: 5
+  },
+  readinessSummary: {
+    marginTop: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.13)",
+    padding: 14,
+    gap: 6
+  },
+  readinessSummaryTitle: {
+    color: colors.success,
+    fontSize: 14,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.7
+  },
+  readinessSummaryText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: "700"
   },
   startSummaryTitle: {
     color: colors.text,
@@ -699,8 +911,14 @@ function createStyles(colors: AppColors) {
     gap: 10
   },
   routineCardCompleted: {
+    borderWidth: 2,
     borderColor: colors.success,
-    backgroundColor: "rgba(47, 122, 87, 0.1)"
+    backgroundColor: "rgba(47, 122, 87, 0.24)",
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    elevation: 5
   },
   routineMetaRow: {
     flexDirection: "row",
@@ -724,8 +942,14 @@ function createStyles(colors: AppColors) {
     borderColor: colors.inputBorder
   },
   machineCardCompleted: {
+    borderWidth: 2,
     borderColor: colors.success,
-    backgroundColor: "rgba(47, 122, 87, 0.1)"
+    backgroundColor: "rgba(47, 122, 87, 0.26)",
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    elevation: 5
   },
   machineMeta: {
     padding: 16,
@@ -745,8 +969,13 @@ function createStyles(colors: AppColors) {
     justifyContent: "flex-end"
   },
   completedLabel: {
-    color: colors.success,
-    fontSize: 12,
+    color: "#ffffff",
+    backgroundColor: colors.success,
+    borderRadius: 999,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    fontSize: 13,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 0.7
@@ -806,6 +1035,12 @@ function createStyles(colors: AppColors) {
     lineHeight: 19,
     fontWeight: "800"
   },
+  safetyNote: {
+    color: colors.danger,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "900"
+  },
   restWhyButton: {
     alignSelf: "flex-start",
     marginTop: 2
@@ -819,6 +1054,12 @@ function createStyles(colors: AppColors) {
     color: colors.textMuted,
     fontSize: 13,
     lineHeight: 19
+  },
+  selectionReason: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700"
   },
   openMachineButton: {
     marginTop: 8,

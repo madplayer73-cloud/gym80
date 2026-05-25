@@ -21,12 +21,16 @@ import {
   AppTab,
   Machine,
   MuscleGroup,
+  ReadinessCheck,
   WorkoutFeeling,
   WorkoutFocus,
   WorkoutSession
 } from "./src/types";
 import { AppColors, ThemeMode, ThemeProvider, useTheme } from "./src/theme";
-import { buildMotivationMessage } from "./src/utils/motivation";
+import {
+  buildMotivationMessage,
+  buildRoutineMotivationMessage
+} from "./src/utils/motivation";
 import {
   CloudDataSnapshot,
   CloudUser,
@@ -240,11 +244,19 @@ function AppShell() {
     warmupMin: 8,
     cooldownMin: 5,
     manualFocus: null,
+    readiness: {
+      energia: 3,
+      spanok: "priemerny",
+      svalovica: "ziadna",
+      bolest: "nie",
+      cielDna: "normal"
+    } satisfies ReadinessCheck,
     hasStarted: false
   });
   const [hasLoadedStoredSessions, setHasLoadedStoredSessions] = useState(false);
   const [hasLoadedStoredFavorites, setHasLoadedStoredFavorites] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showAuthExport, setShowAuthExport] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
@@ -431,7 +443,14 @@ function AppShell() {
           return;
         }
 
-        if (cloudData?.sessions?.every(isWorkoutSession)) {
+        const cloudSessionsAreValid =
+          Array.isArray(cloudData?.sessions) &&
+          cloudData.sessions.every(isWorkoutSession);
+        const shouldUseCloudData =
+          cloudSessionsAreValid &&
+          (cloudData.sessions.length > 0 || sessions.length === 0);
+
+        if (shouldUseCloudData) {
           setSessions(cloudData.sessions);
           setFavoriteMachineIds(
             Array.isArray(cloudData.favoriteMachineIds)
@@ -603,10 +622,15 @@ function AppShell() {
     const previousEntry = sessions
       .flatMap((session) => session.entries)
       .find((entry) => entry.machineId === machineId);
+    const totalWorkoutEntries = sessions.reduce(
+      (sum, session) => sum + session.entries.length,
+      0
+    );
     const motivationMessage = buildMotivationMessage({
       machine: machineMap.get(machineId),
       entry: newEntry,
-      previousEntry
+      previousEntry,
+      totalWorkoutEntries
     });
 
     setSessions((currentSessions) => {
@@ -710,8 +734,8 @@ function AppShell() {
 
     setToastMessage(
       machineId === WARMUP_ROUTINE_MACHINE_ID
-        ? "🔥 Rozcvicka hotova. Motor bezi, teraz ideme na zelezo."
-        : "🧘 Schladenie hotove. Svaly podakovali, ego nech si sadne."
+        ? buildRoutineMotivationMessage("warmup")
+        : buildRoutineMotivationMessage("cooldown")
     );
   };
 
@@ -890,7 +914,11 @@ function AppShell() {
     return (
       <AuthGate
         colors={colors}
+        exportValue={historyExportValue}
         isLoading
+        showExport={showAuthExport}
+        hasLocalHistory={sessions.length > 0}
+        onToggleExport={() => setShowAuthExport((current) => !current)}
         onGoogleLogin={handleGoogleLogin}
       />
     );
@@ -900,6 +928,10 @@ function AppShell() {
     return (
       <AuthGate
         colors={colors}
+        exportValue={historyExportValue}
+        showExport={showAuthExport}
+        hasLocalHistory={sessions.length > 0}
+        onToggleExport={() => setShowAuthExport((current) => !current)}
         onGoogleLogin={handleGoogleLogin}
       />
     );
@@ -926,7 +958,7 @@ function AppShell() {
             <Text style={styles.headerSubtitle}>{getTabLabel(activeTab)}</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>BETA</Text>
+            <Text style={styles.headerBadgeText}>Beta v1</Text>
           </View>
         </View>
       ) : null}
@@ -959,11 +991,19 @@ function AppShell() {
 
 function AuthGate({
   colors,
+  exportValue,
+  hasLocalHistory,
   isLoading,
+  showExport,
+  onToggleExport,
   onGoogleLogin
 }: {
   colors: AppColors;
+  exportValue: string;
+  hasLocalHistory: boolean;
   isLoading?: boolean;
+  showExport: boolean;
+  onToggleExport: () => void;
   onGoogleLogin: () => void;
 }) {
   const styles = React.useMemo(() => createAuthStyles(colors), [colors]);
@@ -989,6 +1029,35 @@ function AuthGate({
         <Text style={styles.note}>
           Apple prihlasenie pripravime neskor. Teraz ideme stabilny Google zaklad.
         </Text>
+        {hasLocalHistory ? (
+          <>
+            <Pressable
+              onPress={onToggleExport}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {showExport ? "Skryt lokalnu historiu" : "Zachranit lokalnu historiu"}
+              </Text>
+            </Pressable>
+            {showExport ? (
+              <View style={styles.exportBox}>
+                <Text style={styles.exportTitle}>Nudzovy export historie</Text>
+                <Text style={styles.exportHelp}>
+                  Toto je zaloha treningov z tohto prehliadaca. Oznac text, skopiruj ho
+                  a posli mi ho alebo si ho odloz.
+                </Text>
+                <Text selectable style={styles.exportText}>
+                  {exportValue}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.note}>
+            V tomto prehliadaci teraz nevidim lokalnu historiu. Ak bola v inom mobile
+            alebo inom prehliadaci, treba otvorit appku tam.
+          </Text>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -1065,41 +1134,42 @@ function createStyles(colors: AppColors) {
     position: "absolute",
     left: 0,
     right: 0,
-    top: 92,
+    top: 74,
     alignItems: "center",
     zIndex: 20,
-    paddingHorizontal: 16
+    paddingHorizontal: 14
   },
   toastCard: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
+    gap: 16,
     width: "100%",
     maxWidth: 560,
+    minHeight: 260,
     backgroundColor: colors.surface,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: colors.highlight,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    borderRadius: 22,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    borderRadius: 30,
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 1,
-    shadowRadius: 18,
-    elevation: 8
+    shadowRadius: 26,
+    elevation: 12
   },
   toastDot: {
-    width: 18,
-    height: 18,
+    width: 54,
+    height: 10,
     borderRadius: 999,
     backgroundColor: colors.highlight
   },
   toastLabel: {
-    flexShrink: 1,
     color: colors.text,
-    fontSize: 16,
+    fontSize: 24,
     fontWeight: "900",
-    lineHeight: 22
+    lineHeight: 32,
+    textAlign: "center"
   }
   });
 }
@@ -1161,6 +1231,43 @@ function createAuthStyles(colors: AppColors) {
       color: colors.textMuted,
       fontSize: 13,
       lineHeight: 19
+    },
+    secondaryButton: {
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.accentSoft,
+      paddingVertical: 13,
+      alignItems: "center"
+    },
+    secondaryButtonText: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: "900"
+    },
+    exportBox: {
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.highlight,
+      backgroundColor: colors.inputSurface,
+      padding: 14,
+      gap: 10,
+      maxHeight: 300
+    },
+    exportTitle: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: "900"
+    },
+    exportHelp: {
+      color: colors.textMuted,
+      fontSize: 13,
+      lineHeight: 19
+    },
+    exportText: {
+      color: colors.text,
+      fontSize: 11,
+      lineHeight: 16
     }
   });
 }
