@@ -87,6 +87,8 @@ export type JointStressProfile = {
 
 export type TechniqueQuality = "cista" | "prijatelna" | "zla";
 
+export type TrainingSetType = "warmup" | "working";
+
 export type Machine = {
   id: string;
   brand: "Gym80" | "Volne vahy" | "Trener";
@@ -124,6 +126,8 @@ export type Machine = {
 export type TrainingSetLog = {
   id: string;
   setNumber: number;
+  setType?: TrainingSetType;
+  targetPercent?: number;
   weightKg?: number;
   reps?: number;
   rpe?: number;

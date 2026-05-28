@@ -1554,14 +1554,23 @@ function getExerciseCount(
   readinessBand: ReadinessBand
 ) {
   const trainingMinutes = Math.max(20, targetDurationMinutes - warmupMin - cooldownMin);
+  const warmupAwareCount = Math.round(trainingMinutes / 10);
   const historyBasedCount = stats.totalSessions > 0
-    ? Math.round((stats.exercisesPer60Min / 60) * trainingMinutes)
-    : Math.round(trainingMinutes / 8);
+    ? Math.min(
+        Math.round((stats.exercisesPer60Min / 60) * trainingMinutes),
+        warmupAwareCount + 1
+      )
+    : warmupAwareCount;
 
   const readinessAdjustment =
     readinessBand === "vysoka" ? 1 : readinessBand === "nizka" ? -2 : 0;
+  const warmupSetAdjustment = -1;
+  const upperLimit = targetDurationMinutes >= 120 ? 8 : 7;
 
-  return Math.min(9, Math.max(3, historyBasedCount + readinessAdjustment));
+  return Math.min(
+    upperLimit,
+    Math.max(3, historyBasedCount + readinessAdjustment + warmupSetAdjustment)
+  );
 }
 
 function getAverageRestForMachine(sessions: WorkoutSession[], machineId: string) {

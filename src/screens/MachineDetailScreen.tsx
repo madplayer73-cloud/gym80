@@ -18,6 +18,7 @@ import {
   ReadinessPain,
   TechniqueQuality,
   TrainingSetLog,
+  TrainingSetType,
   UserExerciseProfile,
   WorkoutEntry,
   WorkoutFeeling
@@ -90,6 +91,53 @@ function clampSetCount(value: number) {
   return Math.min(8, Math.max(1, Math.round(value || 1)));
 }
 
+function roundTrainingWeight(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function getWarmupWeight(workingWeightKg: number | undefined, percent: number | undefined) {
+  if (!workingWeightKg || !percent) {
+    return undefined;
+  }
+
+  return roundTrainingWeight(workingWeightKg * (percent / 100));
+}
+
+function getSuggestedWorkingWeight(
+  latestEntry: WorkoutEntry | undefined,
+  guidance: ReturnType<typeof getMachineTrainingGuidance>
+) {
+  const latestWeight = latestEntry?.weightKg ?? 0;
+
+  if (!latestWeight) {
+    return undefined;
+  }
+
+  const painLevel = latestEntry?.painLevel ?? (latestEntry?.feeling === "bolest" ? 5 : 0);
+  const rpe =
+    latestEntry?.rpe ??
+    (latestEntry?.feeling === "tazke" ? 9.5 : latestEntry?.feeling === "bolest" ? 10 : 8);
+  const reps = latestEntry?.reps ?? 0;
+  const sets = latestEntry?.sets ?? 0;
+  const techniqueQuality = latestEntry?.techniqueQuality ?? "cista";
+
+  if (painLevel >= 3 || rpe >= 9.5 || techniqueQuality === "zla") {
+    return Math.max(0, roundTrainingWeight(latestWeight - guidance.microloadStepKg));
+  }
+
+  if (
+    sets >= 3 &&
+    reps >= guidance.defaultRepMax &&
+    rpe <= 8.5 &&
+    painLevel === 0 &&
+    latestEntry?.feeling !== "tazke"
+  ) {
+    return roundTrainingWeight(latestWeight + guidance.microloadStepKg);
+  }
+
+  return latestWeight;
+}
+
 function createSetLog({
   index,
   weightKg,
@@ -98,7 +146,9 @@ function createSetLog({
   painLocation,
   painLevel,
   restSeconds,
-  techniqueQuality
+  techniqueQuality,
+  setType = "working",
+  targetPercent
 }: {
   index: number;
   weightKg?: number;
@@ -108,10 +158,14 @@ function createSetLog({
   painLevel: number;
   restSeconds?: number;
   techniqueQuality: TechniqueQuality;
+  setType?: TrainingSetType;
+  targetPercent?: number;
 }): TrainingSetLog {
   return {
     id: `set-${index + 1}-${Date.now()}`,
     setNumber: index + 1,
+    setType,
+    targetPercent,
     weightKg,
     reps,
     rpe,
@@ -123,10 +177,79 @@ function createSetLog({
   };
 }
 
+function syncSetWeightsForWorkingWeight(logs: TrainingSetLog[], workingWeightKg: number) {
+  return logs.map((setLog) => {
+    if (setLog.completed) {
+      return setLog;
+    }
+
+    if (setLog.setType === "warmup") {
+      return {
+        ...setLog,
+        weightKg: getWarmupWeight(workingWeightKg, setLog.targetPercent) ?? setLog.weightKg
+      };
+    }
+
+    return {
+      ...setLog,
+      weightKg: workingWeightKg
+    };
+  });
+}
+
+function getSetTitle(setLog: TrainingSetLog, workingIndex: number) {
+  if (setLog.setType === "warmup") {
+    return `Rozcvicka ${setLog.targetPercent ? `${setLog.targetPercent}%` : ""}`.trim();
+  }
+
+  return `Pracovna seria ${workingIndex}`;
+}
+
 function formatTimer(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const restSeconds = seconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(restSeconds).padStart(2, "0")}`;
+}
+
+function playRestDoneSound() {
+  try {
+    const AudioContextCtor =
+      (globalThis as unknown as { AudioContext?: typeof AudioContext }).AudioContext ??
+      (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    const audioContext = new AudioContextCtor();
+    const beeps = [
+      { delayMs: 0, durationMs: 90, frequency: 880 },
+      { delayMs: 170, durationMs: 90, frequency: 980 },
+      { delayMs: 360, durationMs: 240, frequency: 1160 }
+    ];
+
+    beeps.forEach((beep) => {
+      globalThis.setTimeout(() => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.value = beep.frequency;
+        gain.gain.setValueAtTime(0.001, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.2, audioContext.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(
+          0.001,
+          audioContext.currentTime + beep.durationMs / 1000
+        );
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + beep.durationMs / 1000);
+      }, beep.delayMs);
+    });
+  } catch {
+    // Zvuk je len prijemny bonus. Ak ho prehliadac zablokuje, appka ide dalej.
+  }
 }
 
 export function MachineDetailScreen({
@@ -169,7 +292,10 @@ export function MachineDetailScreen({
   const maxCardioDuration = cardioEntries.length
     ? Math.max(...cardioEntries.map((entry) => entry.durationMin ?? 0))
     : 0;
-  const trainingGuidance = getMachineTrainingGuidance(machine, latestEntry?.weightKg);
+  const trainingGuidance = React.useMemo(
+    () => getMachineTrainingGuidance(machine, latestEntry?.weightKg),
+    [latestEntry?.weightKg, machine]
+  );
   const restText =
     trainingGuidance.recommendedRestMaxSec === 0
       ? "podla potreby"
@@ -201,6 +327,7 @@ export function MachineDetailScreen({
   const [techniqueQuality, setTechniqueQuality] = React.useState<TechniqueQuality>("cista");
   const [restSeconds, setRestSeconds] = React.useState(String(restTimerSeconds));
   const [setLogs, setSetLogs] = React.useState<TrainingSetLog[]>([]);
+  const [collapsedSetIds, setCollapsedSetIds] = React.useState<Record<string, boolean>>({});
   const [activeRestTimer, setActiveRestTimer] = React.useState<{
     setNumber: number;
     remainingSec: number;
@@ -220,9 +347,13 @@ export function MachineDetailScreen({
     : null;
 
   React.useEffect(() => {
-    setWeightKg(latestEntry?.weightKg ? String(latestEntry.weightKg) : "");
+    const suggestedWorkingWeight = getSuggestedWorkingWeight(latestEntry, trainingGuidance);
+    const workingSets = clampSetCount(latestEntry?.sets ?? 4);
+    const workingReps = latestEntry?.reps ?? trainingGuidance.defaultRepMax ?? 10;
+
+    setWeightKg(suggestedWorkingWeight ? String(suggestedWorkingWeight) : "");
     setSets(latestEntry?.sets ? String(latestEntry.sets) : "4");
-    setReps(latestEntry?.reps ? String(latestEntry.reps) : "10");
+    setReps(latestEntry?.reps ? String(latestEntry.reps) : String(trainingGuidance.defaultRepMax ?? 10));
     setDurationMin(latestEntry?.durationMin ? String(latestEntry.durationMin) : "20");
     setSpeedKph(latestEntry?.speedKph ? String(latestEntry.speedKph) : "6");
     setInclinePercent(
@@ -239,30 +370,58 @@ export function MachineDetailScreen({
     setRestSeconds(
       latestEntry?.restSeconds ? String(latestEntry.restSeconds) : String(restTimerSeconds)
     );
-    setSetLogs(
-      latestEntry?.setLogs?.length
-        ? latestEntry.setLogs.map((setLog, index) => ({
-            ...setLog,
-            id: `set-${index + 1}-${Date.now()}`,
-            setNumber: index + 1,
-            techniqueQuality: setLog.techniqueQuality ?? latestEntry.techniqueQuality ?? "cista",
-            completed: false
-          }))
-        : Array.from({ length: clampSetCount(latestEntry?.sets ?? 4) }, (_item, index) =>
-            createSetLog({
-              index,
-              weightKg: latestEntry?.weightKg,
-              reps: latestEntry?.reps ?? 10,
-              rpe: latestEntry?.rpe ?? 8,
-              painLocation: latestEntry?.painLocation ?? "nie",
-              painLevel: latestEntry?.painLevel ?? 0,
-              restSeconds: latestEntry?.restSeconds ?? restTimerSeconds,
-              techniqueQuality: latestEntry?.techniqueQuality ?? "cista"
-            })
-          )
+    const warmupLogs = trainingGuidance.warmupSets.map((warmupSet, index) =>
+      createSetLog({
+        index,
+        weightKg:
+          warmupSet.weightKg ??
+          getWarmupWeight(suggestedWorkingWeight, warmupSet.percent),
+        reps: warmupSet.reps,
+        rpe: 5,
+        painLocation: latestEntry?.painLocation ?? "nie",
+        painLevel: latestEntry?.painLevel ?? 0,
+        restSeconds: latestEntry?.restSeconds ?? restTimerSeconds,
+        techniqueQuality: latestEntry?.techniqueQuality ?? "cista",
+        setType: "warmup",
+        targetPercent: warmupSet.percent
+      })
     );
+    const existingWorkingLogs =
+      latestEntry?.setLogs
+        ?.filter((setLog) => setLog.setType !== "warmup")
+        .map((setLog, index) => ({
+          ...setLog,
+          id: `set-working-${index + 1}-${Date.now()}`,
+          setNumber: warmupLogs.length + index + 1,
+          setType: "working" as const,
+          weightKg: suggestedWorkingWeight ?? setLog.weightKg,
+          reps: setLog.reps ?? workingReps,
+          techniqueQuality: setLog.techniqueQuality ?? latestEntry.techniqueQuality ?? "cista",
+          completed: false
+        }))
+        .slice(0, workingSets) ?? [];
+    const generatedWorkingLogs = Array.from(
+      { length: Math.max(0, workingSets - existingWorkingLogs.length) },
+      (_item, index) =>
+        createSetLog({
+          index: warmupLogs.length + existingWorkingLogs.length + index,
+          weightKg: suggestedWorkingWeight,
+          reps: workingReps,
+          rpe: latestEntry?.rpe ?? 8,
+          painLocation: latestEntry?.painLocation ?? "nie",
+          painLevel: latestEntry?.painLevel ?? 0,
+          restSeconds: latestEntry?.restSeconds ?? restTimerSeconds,
+          techniqueQuality: latestEntry?.techniqueQuality ?? "cista",
+          setType: "working"
+        })
+    );
+
+    setSetLogs([...warmupLogs, ...existingWorkingLogs, ...generatedWorkingLogs].map(
+      (setLog, index) => ({ ...setLog, setNumber: index + 1 })
+    ));
+    setCollapsedSetIds({});
     setActiveRestTimer(null);
-  }, [latestEntry?.id, machine.id, restTimerSeconds]);
+  }, [latestEntry?.id, machine.id, restTimerSeconds, trainingGuidance]);
 
   React.useEffect(() => {
     if (!activeRestTimer) {
@@ -271,6 +430,7 @@ export function MachineDetailScreen({
 
     if (activeRestTimer.remainingSec <= 0) {
       setActiveRestTimer(null);
+      playRestDoneSound();
       triggerSuccessHaptic();
       return;
     }
@@ -288,12 +448,34 @@ export function MachineDetailScreen({
     triggerTapHaptic();
     const current = Number(weightKg || "0");
     const next = Math.max(0, Math.round((current + delta) * 100) / 100);
-    setWeightKg(next === 0 ? "" : String(next));
+    handleWorkingWeightChange(next === 0 ? "" : String(next));
+  };
+
+  const handleWorkingWeightChange = (value: string) => {
+    setWeightKg(value);
+    const parsedWeight = Number(value);
+
+    if (!parsedWeight) {
+      return;
+    }
+
+    setSetLogs((currentLogs) => syncSetWeightsForWorkingWeight(currentLogs, parsedWeight));
+  };
+
+  const handleWorkingRepsChange = (value: string) => {
+    setReps(value);
+    const parsedReps = Number(value);
+
+    if (!parsedReps) {
+      return;
+    }
+
     setSetLogs((currentLogs) =>
-      currentLogs.map((setLog) => ({
-        ...setLog,
-        weightKg: next || setLog.weightKg
-      }))
+      currentLogs.map((setLog) =>
+        setLog.setType === "warmup" || setLog.completed
+          ? setLog
+          : { ...setLog, reps: parsedReps }
+      )
     );
   };
 
@@ -317,29 +499,37 @@ export function MachineDetailScreen({
     }
 
     setSetLogs((currentLogs) => {
-      if (currentLogs.length === parsedSets) {
+      const warmupLogs = currentLogs.filter((setLog) => setLog.setType === "warmup");
+      const workingLogs = currentLogs.filter((setLog) => setLog.setType !== "warmup");
+
+      if (workingLogs.length === parsedSets) {
         return currentLogs;
       }
 
-      if (currentLogs.length > parsedSets) {
-        return currentLogs.slice(0, parsedSets);
+      if (workingLogs.length > parsedSets) {
+        return [...warmupLogs, ...workingLogs.slice(0, parsedSets)].map((setLog, index) => ({
+          ...setLog,
+          setNumber: index + 1
+        }));
       }
 
       return [
-        ...currentLogs,
-        ...Array.from({ length: parsedSets - currentLogs.length }, (_item, index) =>
+        ...warmupLogs,
+        ...workingLogs,
+        ...Array.from({ length: parsedSets - workingLogs.length }, (_item, index) =>
           createSetLog({
-            index: currentLogs.length + index,
+            index: warmupLogs.length + workingLogs.length + index,
             weightKg: Number(weightKg) || undefined,
             reps: Number(reps) || undefined,
             rpe,
             painLocation,
             painLevel,
             restSeconds: Number(restSeconds) || restTimerSeconds,
-            techniqueQuality
+            techniqueQuality,
+            setType: "working"
           })
         )
-      ];
+      ].map((setLog, index) => ({ ...setLog, setNumber: index + 1 }));
     });
   };
 
@@ -352,6 +542,11 @@ export function MachineDetailScreen({
       completedAt: now,
       restSecondsUsed: Number(restSeconds) || restTimerSeconds
     });
+    const completedSet = setLogs.find((setLog) => setLog.setNumber === setNumber);
+
+    if (completedSet) {
+      setCollapsedSetIds((current) => ({ ...current, [completedSet.id]: true }));
+    }
     setActiveRestTimer({
       setNumber,
       remainingSec: Number(restSeconds) || restTimerSeconds
@@ -401,19 +596,21 @@ export function MachineDetailScreen({
         techniqueQuality: setLog.techniqueQuality ?? techniqueQuality
       })
     );
-    const parsedSets = logsForSave.length;
+    const workingLogsForSave = logsForSave.filter((setLog) => setLog.setType !== "warmup");
+    const performanceLogs = workingLogsForSave.length > 0 ? workingLogsForSave : logsForSave;
+    const parsedSets = performanceLogs.length;
     const parsedReps = Math.round(
-      logsForSave.reduce((sum, setLog) => sum + (setLog.reps ?? 0), 0) / parsedSets
+      performanceLogs.reduce((sum, setLog) => sum + (setLog.reps ?? 0), 0) / parsedSets
     );
     const averageWeight =
       Math.round(
-        (logsForSave.reduce((sum, setLog) => sum + (setLog.weightKg ?? 0), 0) /
+        (performanceLogs.reduce((sum, setLog) => sum + (setLog.weightKg ?? 0), 0) /
           parsedSets) *
           100
       ) / 100;
     const averageRpe =
       Math.round(
-        (logsForSave.reduce((sum, setLog) => sum + (setLog.rpe ?? rpe), 0) /
+        (performanceLogs.reduce((sum, setLog) => sum + (setLog.rpe ?? rpe), 0) /
           parsedSets) *
           10
       ) / 10;
@@ -762,7 +959,7 @@ export function MachineDetailScreen({
               </Pressable>
               <TextInput
                 value={weightKg}
-                onChangeText={setWeightKg}
+                onChangeText={handleWorkingWeightChange}
                 keyboardType="decimal-pad"
                 placeholder="Zadaj kg"
                 placeholderTextColor={colors.textMuted}
@@ -790,7 +987,7 @@ export function MachineDetailScreen({
                 <Text style={styles.fieldLabel}>Opakovania</Text>
                 <TextInput
                   value={reps}
-                  onChangeText={setReps}
+                  onChangeText={handleWorkingRepsChange}
                   keyboardType="number-pad"
                   style={styles.smallInput}
                 />
@@ -887,145 +1084,212 @@ export function MachineDetailScreen({
               </View>
             ) : null}
             <View style={styles.setStack}>
-              {setLogs.map((setLog) => (
-                <View
-                  key={setLog.id}
-                  style={[styles.setCard, setLog.completed ? styles.setCardDone : null]}
-                >
-                  <View style={styles.setHeader}>
-                    <Text style={styles.setTitle}>{setLog.setNumber}. seria</Text>
-                    <Pressable
-                      onPress={() => startRestAfterSet(setLog.setNumber)}
-                      style={setLog.completed ? styles.setDoneButton : styles.setTimerButton}
-                    >
-                      <Text
-                        style={
-                          setLog.completed
-                            ? styles.setDoneButtonText
-                            : styles.setTimerButtonText
-                        }
+              {setLogs.map((setLog) => {
+                const workingIndex =
+                  setLog.setType === "warmup"
+                    ? 0
+                    : setLogs
+                        .slice(0, setLog.setNumber)
+                        .filter((item) => item.setType !== "warmup").length;
+                const setTitle = getSetTitle(setLog, workingIndex);
+                const isCollapsed = setLog.completed && collapsedSetIds[setLog.id] !== false;
+
+                if (isCollapsed) {
+                  return (
+                    <View key={setLog.id} style={styles.collapsedSetCard}>
+                      <View style={styles.collapsedSetTextWrap}>
+                        <Text style={styles.collapsedSetTitle}>OK {setTitle}</Text>
+                        <Text style={styles.collapsedSetMeta}>
+                          {setLog.weightKg ?? 0} kg x {setLog.reps ?? 0} op. | RPE{" "}
+                          {setLog.rpe ?? "-"}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => {
+                          triggerTapHaptic();
+                          setCollapsedSetIds((current) => ({
+                            ...current,
+                            [setLog.id]: false
+                          }));
+                        }}
+                        style={styles.setTimerButton}
                       >
-                        {setLog.completed ? "Hotovo" : "Hotovo + pauza"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                  <View style={styles.inlineFields}>
-                    <View style={styles.inlineField}>
-                      <Text style={styles.setFieldLabel}>kg</Text>
-                      <TextInput
-                        value={setLog.weightKg ? String(setLog.weightKg) : weightKg}
-                        onChangeText={(value) =>
-                          updateSetLog(setLog.setNumber, {
-                            weightKg: Number(value) || undefined
-                          })
-                        }
-                        keyboardType="decimal-pad"
-                        style={styles.miniInput}
-                      />
+                        <Text style={styles.setTimerButtonText}>Otvorit</Text>
+                      </Pressable>
                     </View>
-                    <View style={styles.inlineField}>
-                      <Text style={styles.setFieldLabel}>op.</Text>
-                      <TextInput
-                        value={setLog.reps ? String(setLog.reps) : reps}
-                        onChangeText={(value) =>
-                          updateSetLog(setLog.setNumber, {
-                            reps: Number(value) || undefined
-                          })
-                        }
-                        keyboardType="number-pad"
-                        style={styles.miniInput}
-                      />
+                  );
+                }
+
+                return (
+                  <View
+                    key={setLog.id}
+                    style={[
+                      styles.setCard,
+                      setLog.setType === "warmup" ? styles.warmupSetCard : null,
+                      setLog.completed ? styles.setCardDone : null
+                    ]}
+                  >
+                    <View style={styles.setHeader}>
+                      <View>
+                        <Text style={styles.setTitle}>{setTitle}</Text>
+                        {setLog.setType === "warmup" ? (
+                          <Text style={styles.setSubtitle}>
+                            priprav telo, nejdeme bojovat o ego
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.setHeaderActions}>
+                        {setLog.completed ? (
+                          <Pressable
+                            onPress={() => {
+                              triggerTapHaptic();
+                              setCollapsedSetIds((current) => ({
+                                ...current,
+                                [setLog.id]: true
+                              }));
+                            }}
+                            style={styles.setTimerButton}
+                          >
+                            <Text style={styles.setTimerButtonText}>Schovat</Text>
+                          </Pressable>
+                        ) : null}
+                        <Pressable
+                          onPress={() => startRestAfterSet(setLog.setNumber)}
+                          style={setLog.completed ? styles.setDoneButton : styles.setTimerButton}
+                        >
+                          <Text
+                            style={
+                              setLog.completed
+                                ? styles.setDoneButtonText
+                                : styles.setTimerButtonText
+                            }
+                          >
+                            {setLog.completed ? "Hotovo" : "Hotovo + pauza"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    <View style={styles.inlineFields}>
+                      <View style={styles.inlineField}>
+                        <Text style={styles.setFieldLabel}>kg</Text>
+                        <TextInput
+                          value={setLog.weightKg ? String(setLog.weightKg) : weightKg}
+                          onChangeText={(value) =>
+                            updateSetLog(setLog.setNumber, {
+                              weightKg: Number(value) || undefined
+                            })
+                          }
+                          keyboardType="decimal-pad"
+                          style={styles.miniInput}
+                        />
+                      </View>
+                      <View style={styles.inlineField}>
+                        <Text style={styles.setFieldLabel}>op.</Text>
+                        <TextInput
+                          value={setLog.reps ? String(setLog.reps) : reps}
+                          onChangeText={(value) =>
+                            updateSetLog(setLog.setNumber, {
+                              reps: Number(value) || undefined
+                            })
+                          }
+                          keyboardType="number-pad"
+                          style={styles.miniInput}
+                        />
+                      </View>
+                    </View>
+                    <Text style={styles.setFieldLabel}>RPE serie</Text>
+                    <View style={styles.choiceRow}>
+                      {rpeOptions.map((option) => {
+                        const isActive = (setLog.rpe ?? rpe) === option;
+
+                        return (
+                          <Pressable
+                            key={option}
+                            onPress={() => {
+                              triggerTapHaptic();
+                              updateSetLog(setLog.setNumber, { rpe: option });
+                            }}
+                            style={[
+                              styles.choiceButton,
+                              isActive ? styles.choiceButtonActive : null
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.choiceButtonText,
+                                isActive ? styles.choiceButtonTextActive : null
+                              ]}
+                            >
+                              {option}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.setFieldLabel}>Bolest 0-10</Text>
+                    <View style={styles.choiceRow}>
+                      {painLevelOptions.map((option) => {
+                        const isActive = (setLog.painLevel ?? painLevel) === option;
+
+                        return (
+                          <Pressable
+                            key={option}
+                            onPress={() => {
+                              triggerTapHaptic();
+                              updateSetLog(setLog.setNumber, { painLevel: option });
+                            }}
+                            style={[
+                              styles.choiceButton,
+                              isActive ? styles.painChoiceButtonActive : null
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.choiceButtonText,
+                                isActive ? styles.choiceButtonTextActive : null
+                              ]}
+                            >
+                              {option}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.setFieldLabel}>Technika serie</Text>
+                    <View style={styles.feelingRow}>
+                      {techniqueOptions.map((option) => {
+                        const isActive =
+                          (setLog.techniqueQuality ?? techniqueQuality) === option.value;
+
+                        return (
+                          <Pressable
+                            key={option.value}
+                            onPress={() => {
+                              triggerTapHaptic();
+                              updateSetLog(setLog.setNumber, {
+                                techniqueQuality: option.value
+                              });
+                            }}
+                            style={[
+                              styles.feelingButton,
+                              isActive ? styles.feelingButtonActive : null
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.feelingButtonText,
+                                isActive ? styles.feelingButtonTextActive : null
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   </View>
-                  <Text style={styles.setFieldLabel}>RPE serie</Text>
-                  <View style={styles.choiceRow}>
-                    {rpeOptions.map((option) => {
-                      const isActive = (setLog.rpe ?? rpe) === option;
-
-                      return (
-                        <Pressable
-                          key={option}
-                          onPress={() => {
-                            triggerTapHaptic();
-                            updateSetLog(setLog.setNumber, { rpe: option });
-                          }}
-                          style={[
-                            styles.choiceButton,
-                            isActive ? styles.choiceButtonActive : null
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.choiceButtonText,
-                              isActive ? styles.choiceButtonTextActive : null
-                            ]}
-                          >
-                            {option}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.setFieldLabel}>Bolest 0-10</Text>
-                  <View style={styles.choiceRow}>
-                    {painLevelOptions.map((option) => {
-                      const isActive = (setLog.painLevel ?? painLevel) === option;
-
-                      return (
-                        <Pressable
-                          key={option}
-                          onPress={() => {
-                            triggerTapHaptic();
-                            updateSetLog(setLog.setNumber, { painLevel: option });
-                          }}
-                          style={[
-                            styles.choiceButton,
-                            isActive ? styles.painChoiceButtonActive : null
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.choiceButtonText,
-                              isActive ? styles.choiceButtonTextActive : null
-                            ]}
-                          >
-                            {option}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.setFieldLabel}>Technika serie</Text>
-                  <View style={styles.feelingRow}>
-                    {techniqueOptions.map((option) => {
-                      const isActive = (setLog.techniqueQuality ?? techniqueQuality) === option.value;
-
-                      return (
-                        <Pressable
-                          key={option.value}
-                          onPress={() => {
-                            triggerTapHaptic();
-                            updateSetLog(setLog.setNumber, { techniqueQuality: option.value });
-                          }}
-                          style={[
-                            styles.feelingButton,
-                            isActive ? styles.feelingButtonActive : null
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.feelingButtonText,
-                              isActive ? styles.feelingButtonTextActive : null
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </>
         )}
@@ -1441,16 +1705,57 @@ function createStyles(colors: AppColors) {
     borderColor: colors.success,
     backgroundColor: "rgba(47, 122, 87, 0.18)"
   },
+  warmupSetCard: {
+    borderColor: colors.highlight,
+    backgroundColor: colors.highlightSoft
+  },
+  collapsedSetCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.2)",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  collapsedSetTextWrap: {
+    flex: 1,
+    gap: 3
+  },
+  collapsedSetTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  collapsedSetMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "800"
+  },
   setHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10
   },
+  setHeaderActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 8
+  },
   setTitle: {
     color: colors.text,
     fontSize: 15,
     fontWeight: "900"
+  },
+  setSubtitle: {
+    marginTop: 2,
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700"
   },
   setFieldLabel: {
     color: colors.textMuted,
@@ -1515,37 +1820,47 @@ function createStyles(colors: AppColors) {
     color: "#fff8ee"
   },
   timerCard: {
-    borderRadius: 18,
-    borderWidth: 1,
+    minHeight: 260,
+    borderRadius: 30,
+    borderWidth: 2,
     borderColor: colors.success,
-    backgroundColor: "rgba(47, 122, 87, 0.16)",
-    padding: 14,
-    gap: 8,
-    marginBottom: 10
+    backgroundColor: "rgba(47, 122, 87, 0.24)",
+    padding: 24,
+    gap: 16,
+    marginBottom: 16,
+    justifyContent: "center",
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 1,
+    shadowRadius: 26,
+    elevation: 6
   },
   timerTitle: {
     color: colors.success,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 0.6
   },
   timerValue: {
     color: colors.text,
-    fontSize: 24,
-    fontWeight: "900"
+    fontSize: 48,
+    lineHeight: 56,
+    fontWeight: "900",
+    textAlign: "center"
   },
   timerActions: {
     flexDirection: "row",
     gap: 8,
-    flexWrap: "wrap"
+    flexWrap: "wrap",
+    justifyContent: "center"
   },
   timerButton: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 9
+    paddingHorizontal: 18,
+    paddingVertical: 13
   },
   timerButtonText: {
     color: colors.text,
@@ -1554,8 +1869,8 @@ function createStyles(colors: AppColors) {
   timerButtonStrong: {
     borderRadius: 999,
     backgroundColor: colors.success,
-    paddingHorizontal: 12,
-    paddingVertical: 9
+    paddingHorizontal: 18,
+    paddingVertical: 13
   },
   timerButtonStrongText: {
     color: "#fff8ee",
