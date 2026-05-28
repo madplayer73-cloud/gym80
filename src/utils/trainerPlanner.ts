@@ -9,6 +9,8 @@ import {
   MuscleGroup,
   RomBias,
   UserExerciseProfile,
+  UserTrainingLevel,
+  WorkoutEntry,
   WorkoutFocus,
   WorkoutSession
 } from "../types";
@@ -24,11 +26,21 @@ type TrainerMachineMeta = {
   primaryMuscles: string[];
   secondaryMuscles: string[];
   fatigueCost: FatigueCost;
+  fatigueOverlap: string[];
+  jointStressScore: number;
+  incompatibleWithPatterns: MovementPattern[];
   romBias: RomBias;
   defaultRepMin: number;
   defaultRepMax: number;
   microloadStepKg: number;
   tempoHint: string;
+};
+
+export type WarmupSetRecommendation = {
+  percent: number;
+  weightKg?: number;
+  reps: number;
+  note: string;
 };
 
 export type ReadinessBand = "vysoka" | "stredna" | "nizka";
@@ -40,6 +52,18 @@ export type WeeklyTrainingState = {
   axialFatigueScore: number;
   daysSinceLastLoadedPattern: Record<string, number>;
   topNeeds: string[];
+  highStressAreas: string[];
+};
+
+export type WeeklyCoachReport = {
+  workoutCount: number;
+  bestProgress: string;
+  undertrainedMuscles: string[];
+  highStressAreas: string[];
+  painWarnings: string[];
+  nextWeekRecommendation: string;
+  volumeByMuscle: Array<{ label: string; sets: number; target: number; priority: "nizka" | "ok" | "vysoka" }>;
+  volumeByPattern: Array<{ label: string; sets: number; target: number; priority: "nizka" | "ok" | "vysoka" }>;
 };
 
 export type TrainerHistoryStats = {
@@ -79,6 +103,11 @@ export type PlannedExercise = {
   confidenceScore: number;
   confidenceLabel: string;
   safetyNote?: string;
+  noEgoNote?: string;
+  restFeedback?: string;
+  progressType?: string;
+  warmupSets: WarmupSetRecommendation[];
+  alternatives: Machine[];
 };
 
 export type TrainerWorkoutPlan = {
@@ -92,6 +121,7 @@ export type TrainerWorkoutPlan = {
   readinessScore: number;
   readinessSummary: string;
   safetyNotes: string[];
+  weeklyReport: WeeklyCoachReport;
   exercises: PlannedExercise[];
 };
 
@@ -116,7 +146,9 @@ export const defaultReadiness: ReadinessCheck = {
   spanok: "priemerny",
   svalovica: "ziadna",
   bolest: "nie",
-  cielDna: "normal"
+  cielDna: "normal",
+  trainingLevel: "stredne_pokrocily",
+  noEgoMode: true
 };
 
 function getMachineUseCounts(sessions: WorkoutSession[]) {
@@ -294,6 +326,96 @@ function inferSecondaryMuscles(machine: Machine, movementPattern: MovementPatter
   return [];
 }
 
+function inferFatigueOverlap(machine: Machine, movementPattern: MovementPattern) {
+  if (machine.fatigueOverlap?.length) {
+    return machine.fatigueOverlap;
+  }
+
+  if (movementPattern === "horizontalPush" || movementPattern === "verticalPush") {
+    return ["tlak", "ramena", "triceps"];
+  }
+
+  if (movementPattern === "horizontalPull" || movementPattern === "verticalPull") {
+    return ["tah", "chrbat", "biceps"];
+  }
+
+  if (movementPattern === "kneeDominant") {
+    return ["kolena", "predne stehna"];
+  }
+
+  if (movementPattern === "hipDominant") {
+    return ["bedra", "spodny chrbat", "zadok"];
+  }
+
+  return [machine.muscleGroup.toLowerCase()];
+}
+
+function inferJointStressScore(machine: Machine, movementPattern: MovementPattern) {
+  const stressValues = [
+    machine.jointStress?.knees,
+    machine.jointStress?.shoulders,
+    machine.jointStress?.lowerBack,
+    machine.jointStress?.elbows
+  ];
+  const explicitScore = stressValues.reduce((sum, value) => {
+    if (value === "high") {
+      return sum + 3;
+    }
+
+    if (value === "medium") {
+      return sum + 2;
+    }
+
+    if (value === "low") {
+      return sum + 1;
+    }
+
+    return sum;
+  }, 0);
+
+  if (explicitScore > 0) {
+    return explicitScore;
+  }
+
+  if (
+    movementPattern === "kneeDominant" ||
+    movementPattern === "hipDominant" ||
+    movementPattern === "verticalPush"
+  ) {
+    return 3;
+  }
+
+  if (movementPattern === "horizontalPush" || movementPattern === "verticalPull") {
+    return 2;
+  }
+
+  return 1;
+}
+
+function inferIncompatiblePatterns(machine: Machine, movementPattern: MovementPattern): MovementPattern[] {
+  if (machine.incompatibleWithPatterns?.length) {
+    return machine.incompatibleWithPatterns;
+  }
+
+  if (movementPattern === "verticalPush") {
+    return ["horizontalPush", "verticalPush"];
+  }
+
+  if (movementPattern === "horizontalPush") {
+    return ["verticalPush"];
+  }
+
+  if (movementPattern === "kneeDominant") {
+    return ["kneeDominant"];
+  }
+
+  if (movementPattern === "hipDominant") {
+    return ["hipDominant", "coreExtension"];
+  }
+
+  return [];
+}
+
 function inferFatigueCost(machine: Machine, difficulty: ExerciseDifficulty): FatigueCost {
   if (machine.fatigueCost) {
     return machine.fatigueCost;
@@ -377,6 +499,9 @@ function inferMachineMeta(machine: Machine): TrainerMachineMeta {
   const movementPattern = inferMovementPattern(machine);
   const repZone = inferRepZone(machine, exerciseType, difficulty);
   const rest = inferRestRange(machine, exerciseType, difficulty);
+  const fatigueOverlap = inferFatigueOverlap(machine, movementPattern);
+  const jointStressScore = inferJointStressScore(machine, movementPattern);
+  const incompatibleWithPatterns = inferIncompatiblePatterns(machine, movementPattern);
 
   if (machine.recommendedRestMinSec && machine.recommendedRestMaxSec) {
     return {
@@ -390,6 +515,9 @@ function inferMachineMeta(machine: Machine): TrainerMachineMeta {
       primaryMuscles: inferPrimaryMuscles(machine, subgroup),
       secondaryMuscles: inferSecondaryMuscles(machine, movementPattern),
       fatigueCost: inferFatigueCost(machine, difficulty),
+      fatigueOverlap,
+      jointStressScore,
+      incompatibleWithPatterns,
       romBias: inferRomBias(machine),
       defaultRepMin: repZone.min,
       defaultRepMax: repZone.max,
@@ -409,6 +537,9 @@ function inferMachineMeta(machine: Machine): TrainerMachineMeta {
     primaryMuscles: inferPrimaryMuscles(machine, subgroup),
     secondaryMuscles: inferSecondaryMuscles(machine, movementPattern),
     fatigueCost: inferFatigueCost(machine, difficulty),
+    fatigueOverlap,
+    jointStressScore,
+    incompatibleWithPatterns,
     romBias: inferRomBias(machine),
     defaultRepMin: repZone.min,
     defaultRepMax: repZone.max,
@@ -878,6 +1009,9 @@ export function buildWeeklyTrainingState(
     .sort((a, b) => a[1] - b[1])
     .slice(0, 4)
     .map(([muscle]) => muscle);
+  const highStressAreas = Object.entries(hardSetsByPattern)
+    .filter(([, sets]) => sets >= 10)
+    .map(([pattern]) => pattern);
 
   return {
     hardSetsByMuscle,
@@ -885,7 +1019,8 @@ export function buildWeeklyTrainingState(
     exposureCountPerExercise,
     axialFatigueScore,
     daysSinceLastLoadedPattern,
-    topNeeds
+    topNeeds,
+    highStressAreas
   };
 }
 
@@ -1011,6 +1146,204 @@ function getWeeklyNeedScore(meta: TrainerMachineMeta, weeklyState: WeeklyTrainin
   return muscleNeed + Math.max(0, 6 - patternSets);
 }
 
+function getTrainingLevel(readiness: ReadinessCheck): UserTrainingLevel {
+  return readiness.trainingLevel ?? "stredne_pokrocily";
+}
+
+function getTrainingLevelVolumeAdjustment(level: UserTrainingLevel) {
+  if (level === "zaciatocnik" || level === "navrat_po_pauze") {
+    return -1;
+  }
+
+  if (level === "pokrocily") {
+    return 1;
+  }
+
+  return 0;
+}
+
+function getTrainingLevelSafetyNote(level: UserTrainingLevel) {
+  if (level === "zaciatocnik") {
+    return "Uroven: zaciatocnik. Trener voli menej objemu, viac kontroly a pomalsi progres.";
+  }
+
+  if (level === "navrat_po_pauze") {
+    return "Uroven: navrat po pauze. Dnes sa pocita cista technika viac nez kila.";
+  }
+
+  if (level === "pokrocily") {
+    return "Uroven: pokrocily. Trener dovoli viac objemu, ale len ak nie je bolest a RPE neleti do cervenej.";
+  }
+
+  return "Uroven: stredne pokrocily. Progres ma byt maly, meratelny a technicky cisty.";
+}
+
+function getCompatibilityPenalty(meta: TrainerMachineMeta, previousMeta: TrainerMachineMeta | null) {
+  if (!previousMeta) {
+    return 0;
+  }
+
+  let penalty = 0;
+
+  if (meta.incompatibleWithPatterns.includes(previousMeta.movementPattern)) {
+    penalty += 10;
+  }
+
+  const overlapCount = meta.fatigueOverlap.filter((item) =>
+    previousMeta.fatigueOverlap.includes(item)
+  ).length;
+
+  penalty += overlapCount * 3;
+
+  if (meta.jointStressScore >= 3 && previousMeta.jointStressScore >= 3) {
+    penalty += 8;
+  }
+
+  return penalty;
+}
+
+function getLatestEntryForMachine(sessions: WorkoutSession[], machineId: string) {
+  return sessions
+    .flatMap((session) => session.entries)
+    .find((entry) => entry.machineId === machineId);
+}
+
+function getLatestWorkingWeight(sessions: WorkoutSession[], machineId: string) {
+  return getLatestEntryForMachine(sessions, machineId)?.weightKg;
+}
+
+function getPreviousEntryForMachine(sessions: WorkoutSession[], machineId: string) {
+  return sessions
+    .flatMap((session) => session.entries)
+    .filter((entry) => entry.machineId === machineId)[1];
+}
+
+function shouldUseWarmupSets(machine: Machine, meta: TrainerMachineMeta) {
+  const text = getMachineSearchText(machine);
+
+  return (
+    meta.exerciseType === "compound" &&
+    (meta.difficulty === "hard" ||
+      meta.fatigueCost === "high" ||
+      text.includes("leg press") ||
+      text.includes("tlak nohami") ||
+      text.includes("drep") ||
+      text.includes("smith") ||
+      text.includes("hip thrust") ||
+      text.includes("chest press") ||
+      text.includes("hrudnik") ||
+      text.includes("shoulder") ||
+      text.includes("ramena") ||
+      text.includes("pritah") ||
+      text.includes("stahovanie"))
+  );
+}
+
+export function buildWarmupSetRecommendations(
+  machine: Machine,
+  workingWeightKg?: number
+): WarmupSetRecommendation[] {
+  const meta = inferMachineMeta(machine);
+
+  if (!shouldUseWarmupSets(machine, meta)) {
+    return [];
+  }
+
+  if (!workingWeightKg || workingWeightKg <= 0) {
+    return [
+      { percent: 40, reps: 10, note: "lahka rozcvicovacia seria, len nacvik pohybu" },
+      { percent: 60, reps: 6, note: "stredna rozcvicovacia seria, stale bez boja" }
+    ];
+  }
+
+  return [
+    {
+      percent: 40,
+      weightKg: Math.round(workingWeightKg * 0.4 * 10) / 10,
+      reps: 10,
+      note: "lahka rozcvicovacia seria"
+    },
+    {
+      percent: 60,
+      weightKg: Math.round(workingWeightKg * 0.6 * 10) / 10,
+      reps: 6,
+      note: "stredna rozcvicovacia seria pred pracovnymi seriami"
+    }
+  ];
+}
+
+function buildNoEgoNote(entry: WorkoutEntry | undefined, targetRepMin: number) {
+  if (!entry) {
+    return undefined;
+  }
+
+  const painLevel = entry.painLevel ?? (entry.feeling === "bolest" ? 5 : 0);
+  const rpe = entry.rpe ?? (entry.feeling === "tazke" ? 9.5 : entry.feeling === "bolest" ? 10 : 8);
+  const reps = entry.reps ?? 0;
+
+  if (painLevel >= 3) {
+    return "No ego: bola bolest. Dnes nepridavaj vahu, radsej cista technika alebo alternativa.";
+  }
+
+  if (entry.techniqueQuality === "zla") {
+    return "No ego: technika bola zla. Progres sa pocita az ked je pohyb cisty.";
+  }
+
+  if (rpe >= 9.5 || reps < targetRepMin) {
+    return "No ego: minule to bolo prilis tazke. Drz alebo uber, svaly rastu z poctivej prace, nie z machrovania.";
+  }
+
+  return undefined;
+}
+
+function buildRestFeedback(
+  entry: WorkoutEntry | undefined,
+  userAverageRestSec: number | undefined,
+  min: number
+) {
+  if (!entry || !userAverageRestSec || !entry.reps) {
+    return undefined;
+  }
+
+  if (userAverageRestSec < min && entry.rpe && entry.rpe >= 9) {
+    return "Pauza bola asi kratka. Nabuduce si pridaj 15 az 30 sekund, nech neklesne vykon.";
+  }
+
+  if (userAverageRestSec < min && entry.rpe && entry.rpe <= 8 && entry.reps >= 10) {
+    return "Tempo zvladas dobre. Ak sa ponahlas, kratka pauza ti zatial funguje.";
+  }
+
+  return undefined;
+}
+
+function getProgressType(latest?: WorkoutEntry, previous?: WorkoutEntry) {
+  if (!latest || !previous) {
+    return "zbieram data";
+  }
+
+  if ((latest.painLevel ?? 0) < (previous.painLevel ?? 0)) {
+    return "menej bolesti";
+  }
+
+  if ((latest.rpe ?? 10) < (previous.rpe ?? 10) && latest.weightKg === previous.weightKg) {
+    return "rovnaky vykon s nizsim RPE";
+  }
+
+  if ((latest.weightKg ?? 0) > (previous.weightKg ?? 0)) {
+    return "vyssia vaha";
+  }
+
+  if ((latest.reps ?? 0) > (previous.reps ?? 0)) {
+    return "viac opakovani";
+  }
+
+  if ((latest.sets ?? 0) > (previous.sets ?? 0)) {
+    return "viac serii";
+  }
+
+  return "stabilny vykon";
+}
+
 function getCandidateScore(
   machine: Machine,
   useCounts: Map<string, number>,
@@ -1072,6 +1405,7 @@ function getCandidateScore(
     previousMeta?.fatigueCost === "high" && meta.fatigueCost === "high" ? 6 : 0;
   const redundancyPenalty =
     previousMeta?.movementPattern === meta.movementPattern ? 4 : 0;
+  const compatibilityPenalty = getCompatibilityPenalty(meta, previousMeta);
 
   return (
     weeklyNeedScore +
@@ -1084,7 +1418,8 @@ function getCandidateScore(
     safetyPenalty -
     kneePenalty -
     fatiguePenalty -
-    redundancyPenalty
+    redundancyPenalty -
+    compatibilityPenalty
   );
 }
 
@@ -1168,6 +1503,47 @@ function pickMachine({
         previousSelected
       )
   )[0];
+}
+
+function getMachineBusyAlternatives({
+  machine,
+  machines,
+  selectedIds,
+  readiness
+}: {
+  machine: Machine;
+  machines: Machine[];
+  selectedIds: Set<string>;
+  readiness: ReadinessCheck;
+}) {
+  const meta = inferMachineMeta(machine);
+  const recentPainByJoint: Record<string, number> = {};
+
+  return machines
+    .filter((candidate) => candidate.id !== machine.id && !selectedIds.has(candidate.id))
+    .map((candidate) => {
+      const candidateMeta = inferMachineMeta(candidate);
+      const sameMuscleScore =
+        candidateMeta.primaryMuscles.some((muscle) => meta.primaryMuscles.includes(muscle)) ? 12 : 0;
+      const samePatternScore = candidateMeta.movementPattern === meta.movementPattern ? 10 : 0;
+      const jointPenalty =
+        candidateMeta.jointStressScore > meta.jointStressScore + 1 ? 5 : 0;
+      const painPenalty = getSafetyPenalty({
+        machine: candidate,
+        meta: candidateMeta,
+        readiness,
+        recentPainByJoint
+      });
+
+      return {
+        candidate,
+        score: sameMuscleScore + samePatternScore - jointPenalty - painPenalty
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((item) => item.candidate);
 }
 
 function getExerciseCount(
@@ -1261,13 +1637,148 @@ function buildSelectionReason({
   return "Zapada do dnesneho poradia a pomaha vyvazit zataz v treningu.";
 }
 
-export function getMachineTrainingGuidance(machine: Machine) {
+function getRecentEntriesByMachine(sessions: WorkoutSession[]) {
+  const map = new Map<string, WorkoutEntry[]>();
+
+  sessions.forEach((session) => {
+    session.entries.forEach((entry) => {
+      map.set(entry.machineId, [...(map.get(entry.machineId) ?? []), entry]);
+    });
+  });
+
+  return map;
+}
+
+function getPriority(sets: number, target: number): "nizka" | "ok" | "vysoka" {
+  if (sets < target * 0.6) {
+    return "vysoka";
+  }
+
+  if (sets > target * 1.4) {
+    return "nizka";
+  }
+
+  return "ok";
+}
+
+function translatePattern(pattern: string) {
+  const labels: Record<string, string> = {
+    horizontalPush: "tlak vpred",
+    verticalPush: "tlak hore",
+    horizontalPull: "pritah k telu",
+    verticalPull: "tah zhora",
+    kneeDominant: "kolena / kvadricepsy",
+    hipDominant: "bedra / zadok",
+    elbowFlexion: "biceps",
+    elbowExtension: "triceps",
+    calf: "lytka",
+    coreFlexion: "brucho",
+    coreExtension: "spodny chrbat",
+    cardio: "kardio",
+    fullBody: "cele telo"
+  };
+
+  return labels[pattern] ?? pattern;
+}
+
+function buildWeeklyCoachReport(
+  sessions: WorkoutSession[],
+  machines: Machine[],
+  weeklyState: WeeklyTrainingState
+): WeeklyCoachReport {
+  const weekSessions = sessions.filter((session) => isWithinLastDays(session.workoutDate, 7));
+  const machinesById = getMachineMap(machines);
+  const hasAnyHistory = sessions.length > 0;
+  const entriesByMachine = getRecentEntriesByMachine(sessions);
+  const progressItems = [...entriesByMachine.entries()]
+    .map(([machineId, entries]) => {
+      const machine = machinesById.get(machineId);
+      return {
+        machine,
+        type: getProgressType(entries[0], entries[1])
+      };
+    })
+    .filter((item) => item.machine && item.type !== "stabilny vykon" && item.type !== "zbieram data");
+  const bestProgress = progressItems[0]
+    ? `${progressItems[0].machine?.displayNameSk}: ${progressItems[0].type}`
+    : "zatial zbieram data, dalsie treningy to spresnia";
+  const painWarnings = weekSessions.flatMap((session) =>
+    session.entries
+      .filter((entry) => (entry.painLevel ?? 0) >= 3 || entry.feeling === "bolest")
+      .map((entry) => {
+        const machine = machinesById.get(entry.machineId);
+        return `${machine?.displayNameSk ?? "cvik"}: bolest ${entry.painLevel ?? 5}/10`;
+      })
+  );
+  const volumeByMuscle = trackedMuscles.map((muscle) => {
+    const sets = weeklyState.hardSetsByMuscle[muscle] ?? 0;
+    const target = muscle === "brucho" || muscle === "lytka" ? 6 : 10;
+
+    return {
+      label: muscle,
+      sets,
+      target,
+      priority: hasAnyHistory ? getPriority(sets, target) : "ok"
+    };
+  });
+  const patternKeys: MovementPattern[] = [
+    "horizontalPush",
+    "verticalPush",
+    "horizontalPull",
+    "verticalPull",
+    "kneeDominant",
+    "hipDominant",
+    "coreFlexion",
+    "elbowFlexion",
+    "elbowExtension"
+  ];
+  const volumeByPattern = patternKeys.map((pattern) => {
+    const sets = weeklyState.hardSetsByPattern[pattern] ?? 0;
+    const target = pattern === "coreFlexion" ? 6 : 8;
+
+    return {
+      label: translatePattern(pattern),
+      sets,
+      target,
+      priority: hasAnyHistory ? getPriority(sets, target) : "ok"
+    };
+  });
+  const undertrainedMuscles = volumeByMuscle
+    .filter((item) => hasAnyHistory && item.priority === "vysoka")
+    .slice(0, 4)
+    .map((item) => item.label);
+  const highStressAreas = hasAnyHistory ? weeklyState.highStressAreas.map(translatePattern) : [];
+  const nextWeekRecommendation =
+    !hasAnyHistory
+      ? "Zatial startujeme. Po prvych 2 az 3 treningoch zacnem presnejsie strazit objem, progres a unavu."
+      : painWarnings.length > 0
+      ? "Buduci tyzden drz no-ego rezim: menej bolesti, cista technika, az potom kila."
+      : undertrainedMuscles.length > 0
+        ? `Buduci tyzden pridaj objem pre: ${undertrainedMuscles.join(", ")}.`
+        : "Objem vyzera vyrovnane. Mozes pokracovat v malom kontrolovanom progrese.";
+
+  return {
+    workoutCount: weekSessions.length,
+    bestProgress: hasAnyHistory
+      ? bestProgress
+      : "zatial bez historie - prvy trening nastavime rozumne",
+    undertrainedMuscles,
+    highStressAreas,
+    painWarnings,
+    nextWeekRecommendation,
+    volumeByMuscle,
+    volumeByPattern
+  };
+}
+
+export function getMachineTrainingGuidance(machine: Machine, workingWeightKg?: number) {
   const meta = inferMachineMeta(machine);
 
   return {
     ...meta,
     goal: "rast svalov" as const,
-    whyRest: buildWhyRest(meta)
+    whyRest: buildWhyRest(meta),
+    warmupSets: buildWarmupSetRecommendations(machine, workingWeightKg)
   };
 }
 
@@ -1305,6 +1816,8 @@ export function generateTrainerPlan({
   const lastUsed = getLastUsedMap(sessions);
   const readinessScore = scoreReadiness(readiness);
   const readinessBand = getReadinessBand(readinessScore);
+  const trainingLevel = getTrainingLevel(readiness);
+  const trainingLevelVolumeAdjustment = getTrainingLevelVolumeAdjustment(trainingLevel);
   const recentPainByJoint = getRecentPainCountsByJoint(sessions, machinesById);
   const selectedIds = new Set<string>();
   const exerciseCount = getExerciseCount(
@@ -1350,11 +1863,14 @@ export function generateTrainerPlan({
   const exercises = selected.map((machine, index) => {
     const meta = inferMachineMeta(machine);
     const userAverageRestSec = getAverageRestForMachine(sessions, machine.id);
+    const latestEntry = getLatestEntryForMachine(sessions, machine.id);
+    const previousEntry = getPreviousEntryForMachine(sessions, machine.id);
     const isLowReadiness = readinessBand === "nizka";
     const sets = Math.max(
       2,
       (meta.exerciseType === "core" ? 3 : 4) -
-        (isLowReadiness && meta.fatigueCost !== "low" ? 1 : 0)
+        (isLowReadiness && meta.fatigueCost !== "low" ? 1 : 0) +
+        trainingLevelVolumeAdjustment
     );
     const reps = isLowReadiness
       ? Math.max(meta.defaultRepMin, Math.min(meta.defaultRepMax, meta.defaultRepMin + 1))
@@ -1418,7 +1934,26 @@ export function generateTrainerPlan({
           : confidenceScore >= 45
             ? "stredna istota"
             : "nizka istota",
-      safetyNote
+      safetyNote,
+      noEgoNote: readiness.noEgoMode === false
+        ? undefined
+        : buildNoEgoNote(latestEntry, meta.defaultRepMin),
+      restFeedback: buildRestFeedback(
+        latestEntry,
+        userAverageRestSec,
+        meta.recommendedRestMinSec
+      ),
+      progressType: getProgressType(latestEntry, previousEntry),
+      warmupSets: buildWarmupSetRecommendations(
+        machine,
+        getLatestWorkingWeight(sessions, machine.id)
+      ),
+      alternatives: getMachineBusyAlternatives({
+        machine,
+        machines,
+        selectedIds,
+        readiness
+      })
     };
   });
   const estimatedDurationMinutes =
@@ -1438,10 +1973,12 @@ export function generateTrainerPlan({
     readinessSummary: buildReadinessSummary(readiness, readinessBand),
     safetyNotes: [
       `Pripravenost: ${translateReadinessBand(readinessBand)} (${readinessScore})`,
+      getTrainingLevelSafetyNote(trainingLevel),
       ...Array.from(
         new Set(exercises.map((exercise) => exercise.safetyNote).filter(Boolean) as string[])
       )
     ],
+    weeklyReport: buildWeeklyCoachReport(sessions, machines, stats.weeklyState),
     exercises
   };
 }

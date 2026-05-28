@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  DimensionValue,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,11 +20,12 @@ import {
   ReadinessSleep,
   ReadinessSoreness,
   UserExerciseProfile,
+  UserTrainingLevel,
   WorkoutFocus,
   WorkoutSession
 } from "../types";
 import { estimateSessionCalories } from "../utils/calories";
-import { triggerTapHaptic } from "../utils/haptics";
+import { triggerSuccessHaptic, triggerTapHaptic } from "../utils/haptics";
 import {
   defaultReadiness,
   generateTrainerPlan,
@@ -80,11 +82,53 @@ const goalOptions: Array<{ value: ReadinessGoal; label: string }> = [
   { value: "silovy", label: "silnejsi den" },
   { value: "udrzat_rytmus", label: "len udrzat rytmus" }
 ];
+const trainingLevelOptions: Array<{ value: UserTrainingLevel; label: string }> = [
+  { value: "zaciatocnik", label: "zaciatocnik" },
+  { value: "stredne_pokrocily", label: "stredny" },
+  { value: "pokrocily", label: "pokrocily" },
+  { value: "navrat_po_pauze", label: "po pauze" }
+];
+const noEgoOptions: Array<{ value: "zapnuty" | "vypnuty"; label: string }> = [
+  { value: "zapnuty", label: "no ego ON" },
+  { value: "vypnuty", label: "volnejsie" }
+];
 const WARMUP_ROUTINE_MACHINE_ID = "routine-warmup";
 const COOLDOWN_ROUTINE_MACHINE_ID = "routine-cooldown";
 
 function getNextFocus(currentFocus: WorkoutFocus) {
   return currentFocus === "Spodok tela" ? "Vrch tela" : "Spodok tela";
+}
+
+function translateGoal(goal: ReadinessGoal) {
+  if (goal === "lahky") {
+    return "lahsi den";
+  }
+
+  if (goal === "silovy") {
+    return "silnejsi den";
+  }
+
+  if (goal === "udrzat_rytmus") {
+    return "udrzat rytmus";
+  }
+
+  return "normal";
+}
+
+function translateTrainingLevel(level: UserTrainingLevel | undefined) {
+  if (level === "zaciatocnik") {
+    return "zaciatocnik";
+  }
+
+  if (level === "pokrocily") {
+    return "pokrocily";
+  }
+
+  if (level === "navrat_po_pauze") {
+    return "navrat po pauze";
+  }
+
+  return "stredne pokrocily";
 }
 
 export function HomeScreen({
@@ -141,6 +185,13 @@ export function HomeScreen({
   });
   const lastSession = sessions[0];
   const [expandedWhyId, setExpandedWhyId] = React.useState<string | null>(null);
+  const [isSetupExpanded, setIsSetupExpanded] = React.useState(!hasStarted);
+  const [setupSavedMessage, setSetupSavedMessage] = React.useState<string | null>(null);
+  const [expandedRoutineIds, setExpandedRoutineIds] = React.useState<Record<string, boolean>>({});
+  const [expandedCompletedMachineIds, setExpandedCompletedMachineIds] = React.useState<
+    Record<string, boolean>
+  >({});
+  const [busyMachineId, setBusyMachineId] = React.useState<string | null>(null);
   const machineMap = React.useMemo(
     () => new Map(machines.map((machine) => [machine.id, machine])),
     [machines]
@@ -157,6 +208,28 @@ export function HomeScreen({
     );
   }, [sessions, todayKey]);
 
+  React.useEffect(() => {
+    if (hasStarted) {
+      setIsSetupExpanded(false);
+    }
+  }, [hasStarted]);
+
+  React.useEffect(() => {
+    if (!setupSavedMessage) {
+      return;
+    }
+
+    const timeout = setTimeout(() => setSetupSavedMessage(null), 2200);
+
+    return () => clearTimeout(timeout);
+  }, [setupSavedMessage]);
+
+  const saveSetupAndCollapse = () => {
+    triggerSuccessHaptic();
+    setSetupSavedMessage("Ulozene. Trener ma instrukcie a ide skladat plan.");
+    setIsSetupExpanded(false);
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -167,149 +240,204 @@ export function HomeScreen({
         </Text>
       </View>
 
-      <SectionCard
-        title="Kolko mas dnes casu?"
-        subtitle="Zadas celkovy cas, rozcvicku a schladenie. Trener zvysok rozdeli na cviky."
-      >
-        <Text style={styles.optionLabel}>Cely trening</Text>
-        <View style={styles.durationRow}>
-          {durationOptions.map((option) => {
-            const isActive = option === durationMin;
-
-            return (
-              <Pressable
-                key={option}
-                onPress={() => {
-                  triggerTapHaptic();
-                  updateTrainerSettings({ durationMin: option, hasStarted: false });
-                }}
-                style={[styles.durationButton, isActive ? styles.durationButtonActive : null]}
-              >
-                <Text
-                  style={[
-                    styles.durationButtonText,
-                    isActive ? styles.durationButtonTextActive : null
-                  ]}
-                >
-                  {option} min
-                </Text>
-              </Pressable>
-            );
-          })}
+      {!isSetupExpanded ? (
+        <View style={styles.setupDock}>
+          <View style={styles.setupDockHeader}>
+            <View>
+              <Text style={styles.setupDockEyebrow}>Trening nastaveny</Text>
+              <Text style={styles.setupDockTitle}>
+                {durationMin} min | rozcvicka {warmupMin} | schladenie {cooldownMin}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                triggerTapHaptic();
+                setIsSetupExpanded(true);
+              }}
+              style={styles.setupEditButton}
+            >
+              <Text style={styles.setupEditButtonText}>Upravit</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.setupDockText}>
+            Energia {readiness.energia}/5, spanok {readiness.spanok}, svalovica{" "}
+            {readiness.svalovica}, bolest {readiness.bolest}, ciel {translateGoal(readiness.cielDna)}.
+            Uroven {translateTrainingLevel(readiness.trainingLevel)},{" "}
+            {readiness.noEgoMode === false ? "no ego vypnute" : "no ego zapnute"}.
+          </Text>
+          {setupSavedMessage ? (
+            <View style={styles.savedSetupBadge}>
+              <Text style={styles.savedSetupText}>{setupSavedMessage}</Text>
+            </View>
+          ) : null}
         </View>
-        <Text style={styles.optionLabel}>Rozcvicka</Text>
-        <View style={styles.durationRow}>
-          {warmupOptions.map((option) => {
-            const isActive = option === warmupMin;
+      ) : (
+        <>
+          <SectionCard
+            title="Kolko mas dnes casu?"
+            subtitle="Zadas celkovy cas, rozcvicku a schladenie. Trener zvysok rozdeli na cviky."
+          >
+            <Text style={styles.optionLabel}>Cely trening</Text>
+            <View style={styles.durationRow}>
+              {durationOptions.map((option) => {
+                const isActive = option === durationMin;
 
-            return (
-              <Pressable
-                key={option}
-                onPress={() => {
-                  triggerTapHaptic();
-                  updateTrainerSettings({ warmupMin: option, hasStarted: false });
-                }}
-                style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
-              >
-                <Text
-                  style={[
-                    styles.durationButtonText,
-                    isActive ? styles.durationButtonTextActive : null
-                  ]}
-                >
-                  {option} min
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.optionLabel}>Schladenie</Text>
-        <View style={styles.durationRow}>
-          {cooldownOptions.map((option) => {
-            const isActive = option === cooldownMin;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      triggerTapHaptic();
+                      updateTrainerSettings({ durationMin: option, hasStarted: false });
+                    }}
+                    style={[styles.durationButton, isActive ? styles.durationButtonActive : null]}
+                  >
+                    <Text
+                      style={[
+                        styles.durationButtonText,
+                        isActive ? styles.durationButtonTextActive : null
+                      ]}
+                    >
+                      {option} min
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.optionLabel}>Rozcvicka</Text>
+            <View style={styles.durationRow}>
+              {warmupOptions.map((option) => {
+                const isActive = option === warmupMin;
 
-            return (
-              <Pressable
-                key={option}
-                onPress={() => {
-                  triggerTapHaptic();
-                  updateTrainerSettings({ cooldownMin: option, hasStarted: false });
-                }}
-                style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
-              >
-                <Text
-                  style={[
-                    styles.durationButtonText,
-                    isActive ? styles.durationButtonTextActive : null
-                  ]}
-                >
-                  {option} min
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </SectionCard>
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      triggerTapHaptic();
+                      updateTrainerSettings({ warmupMin: option, hasStarted: false });
+                    }}
+                    style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
+                  >
+                    <Text
+                      style={[
+                        styles.durationButtonText,
+                        isActive ? styles.durationButtonTextActive : null
+                      ]}
+                    >
+                      {option} min
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.optionLabel}>Schladenie</Text>
+            <View style={styles.durationRow}>
+              {cooldownOptions.map((option) => {
+                const isActive = option === cooldownMin;
 
-      <SectionCard
-        title="Ako sa dnes citis?"
-        subtitle="Toto ovplyvni pocet cvikov, vyber strojov a to, ci trener nebude zbytocne tlacit na progres."
-      >
-        <Text style={styles.optionLabel}>Energia</Text>
-        <View style={styles.durationRow}>
-          {energyOptions.map((option) => {
-            const isActive = option === readiness.energia;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      triggerTapHaptic();
+                      updateTrainerSettings({ cooldownMin: option, hasStarted: false });
+                    }}
+                    style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
+                  >
+                    <Text
+                      style={[
+                        styles.durationButtonText,
+                        isActive ? styles.durationButtonTextActive : null
+                      ]}
+                    >
+                      {option} min
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </SectionCard>
 
-            return (
-              <Pressable
-                key={option}
-                onPress={() => {
-                  triggerTapHaptic();
-                  updateReadiness({ energia: option });
-                }}
-                style={[styles.readinessButton, isActive ? styles.durationButtonActive : null]}
-              >
-                <Text
-                  style={[
-                    styles.durationButtonText,
-                    isActive ? styles.durationButtonTextActive : null
-                  ]}
-                >
-                  {option}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <ReadinessChoiceRow
-          label="Spanok"
-          options={sleepOptions}
-          selected={readiness.spanok}
-          onSelect={(value) => updateReadiness({ spanok: value })}
-          styles={styles}
-        />
-        <ReadinessChoiceRow
-          label="Svalovica"
-          options={sorenessOptions}
-          selected={readiness.svalovica}
-          onSelect={(value) => updateReadiness({ svalovica: value })}
-          styles={styles}
-        />
-        <ReadinessChoiceRow
-          label="Bolest"
-          options={painOptions}
-          selected={readiness.bolest}
-          onSelect={(value) => updateReadiness({ bolest: value })}
-          styles={styles}
-        />
-        <ReadinessChoiceRow
-          label="Ciel dna"
-          options={goalOptions}
-          selected={readiness.cielDna}
-          onSelect={(value) => updateReadiness({ cielDna: value })}
-          styles={styles}
-        />
-      </SectionCard>
+          <SectionCard
+            title="Ako sa dnes citis?"
+            subtitle="Toto ovplyvni pocet cvikov, vyber strojov a to, ci trener nebude zbytocne tlacit na progres."
+          >
+            <Text style={styles.optionLabel}>Energia</Text>
+            <View style={styles.durationRow}>
+              {energyOptions.map((option) => {
+                const isActive = option === readiness.energia;
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      triggerTapHaptic();
+                      updateReadiness({ energia: option });
+                    }}
+                    style={[styles.readinessButton, isActive ? styles.durationButtonActive : null]}
+                  >
+                    <Text
+                      style={[
+                        styles.durationButtonText,
+                        isActive ? styles.durationButtonTextActive : null
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <ReadinessChoiceRow
+              label="Spanok"
+              options={sleepOptions}
+              selected={readiness.spanok}
+              onSelect={(value) => updateReadiness({ spanok: value })}
+              styles={styles}
+            />
+            <ReadinessChoiceRow
+              label="Svalovica"
+              options={sorenessOptions}
+              selected={readiness.svalovica}
+              onSelect={(value) => updateReadiness({ svalovica: value })}
+              styles={styles}
+            />
+            <ReadinessChoiceRow
+              label="Bolest"
+              options={painOptions}
+              selected={readiness.bolest}
+              onSelect={(value) => updateReadiness({ bolest: value })}
+              styles={styles}
+            />
+            <ReadinessChoiceRow
+              label="Ciel dna"
+              options={goalOptions}
+              selected={readiness.cielDna}
+              onSelect={(value) => updateReadiness({ cielDna: value })}
+              styles={styles}
+            />
+            <ReadinessChoiceRow
+              label="Uroven treningu"
+              options={trainingLevelOptions}
+              selected={readiness.trainingLevel ?? defaultReadiness.trainingLevel ?? "stredne_pokrocily"}
+              onSelect={(value) => updateReadiness({ trainingLevel: value })}
+              styles={styles}
+            />
+            <ReadinessChoiceRow
+              label="Bezpecnost"
+              options={noEgoOptions}
+              selected={readiness.noEgoMode === false ? "vypnuty" : "zapnuty"}
+              onSelect={(value) => updateReadiness({ noEgoMode: value === "zapnuty" })}
+              styles={styles}
+            />
+            <Pressable
+              onPress={saveSetupAndCollapse}
+              style={styles.setupDoneButton}
+            >
+              <Text style={styles.setupDoneButtonText}>Ulozit a posunut sa na navrh</Text>
+            </Pressable>
+          </SectionCard>
+        </>
+      )}
 
       <SectionCard title={suggestion.title} subtitle={suggestion.explanation}>
         <View style={styles.row}>
@@ -363,7 +491,9 @@ export function HomeScreen({
         </Pressable>
         <Pressable
           onPress={() => {
-            triggerTapHaptic();
+            triggerSuccessHaptic();
+            setSetupSavedMessage("Startnute. Nastavenia som schoval, ideme makat.");
+            setIsSetupExpanded(false);
             updateTrainerSettings({ hasStarted: true });
           }}
           style={[styles.startWorkoutButton, hasStarted ? styles.startWorkoutButtonActive : null]}
@@ -412,6 +542,53 @@ export function HomeScreen({
       </SectionCard>
 
           <SectionCard
+            title="Tyzdenny report trenera"
+            subtitle="Kratky servisny protokol: co rastie, co chyba a kde netreba frajerit."
+          >
+            <View style={styles.row}>
+              <StatChip label="Treningy" value={String(trainerPlan.weeklyReport.workoutCount)} />
+              <StatChip
+                label="Podtrenovane"
+                value={String(trainerPlan.weeklyReport.undertrainedMuscles.length)}
+              />
+              <StatChip
+                label="Bolest"
+                value={String(trainerPlan.weeklyReport.painWarnings.length)}
+              />
+            </View>
+            <Text style={styles.tipText}>
+              Najlepsi progres: {trainerPlan.weeklyReport.bestProgress}
+            </Text>
+            <Text style={styles.tipText}>
+              Odporucanie: {trainerPlan.weeklyReport.nextWeekRecommendation}
+            </Text>
+            {trainerPlan.weeklyReport.highStressAreas.length ? (
+              <Text style={styles.safetyNote}>
+                Vysoka zataz: {trainerPlan.weeklyReport.highStressAreas.join(", ")}
+              </Text>
+            ) : null}
+            {trainerPlan.weeklyReport.painWarnings.slice(0, 3).map((warning) => (
+              <Text key={warning} style={styles.safetyNote}>
+                {warning}
+              </Text>
+            ))}
+          </SectionCard>
+
+          <SectionCard
+            title="Prioritny dashboard"
+            subtitle="Zelena je v norme. Oranzova znamena, ze tomu trener da nabuduce viac pozornosti."
+          >
+            <Text style={styles.optionLabel}>Svalove partie</Text>
+            {trainerPlan.weeklyReport.volumeByMuscle.slice(0, 10).map((item) => (
+              <VolumeRow key={item.label} item={item} styles={styles} />
+            ))}
+            <Text style={styles.optionLabel}>Pohybove vzory</Text>
+            {trainerPlan.weeklyReport.volumeByPattern.slice(0, 8).map((item) => (
+              <VolumeRow key={item.label} item={item} styles={styles} />
+            ))}
+          </SectionCard>
+
+          <SectionCard
             title="Rozcvicka"
             subtitle="Prvy bod treningu. Oznac ako hotove, aby bola rozcvicka aj v historii."
           >
@@ -425,6 +602,14 @@ export function HomeScreen({
               orderLabel="1. Start"
               styles={styles}
               title="Rozcvicka pred treningom"
+              isExpanded={expandedRoutineIds[WARMUP_ROUTINE_MACHINE_ID] ?? false}
+              onToggleExpanded={() => {
+                triggerTapHaptic();
+                setExpandedRoutineIds((current) => ({
+                  ...current,
+                  [WARMUP_ROUTINE_MACHINE_ID]: !current[WARMUP_ROUTINE_MACHINE_ID]
+                }));
+              }}
             />
           </SectionCard>
 
@@ -435,6 +620,8 @@ export function HomeScreen({
         <View style={styles.machineStack}>
           {trainerPlan.exercises.map((exercise) => {
             const isCompleted = completedTodayMachineIds.has(exercise.machine.id);
+            const isCompletedCollapsed =
+              isCompleted && !expandedCompletedMachineIds[exercise.machine.id];
 
             return (
             <View
@@ -454,24 +641,94 @@ export function HomeScreen({
                   </View>
                 </View>
                 <Text style={styles.machineName}>{exercise.machine.displayNameSk}</Text>
-                <ExerciseRestBlock
-                  exercise={exercise}
-                  expandedWhyId={expandedWhyId}
-                  onToggleWhy={() => {
-                    triggerTapHaptic();
-                    setExpandedWhyId((current) =>
-                      current === exercise.machine.id ? null : exercise.machine.id
-                    );
-                  }}
-                  styles={styles}
-                />
-                <Text style={styles.selectionReason}>
-                  Preco tento cvik: {exercise.selectionReason}
-                </Text>
-                <Text style={styles.selectionReason}>
-                  Tempo: {exercise.tempoHint}
-                </Text>
-                <Text style={styles.machineCategory}>{exercise.machine.descriptionSk}</Text>
+                {isCompletedCollapsed ? (
+                  <View style={styles.completedCompactBox}>
+                    <Text style={styles.completedCompactTitle}>
+                      Tento bod mas za sebou. Zelena karta, cista hlava, ideme dalej.
+                    </Text>
+                    <Text style={styles.completedCompactText}>
+                      Plan bol {exercise.sets} x {exercise.reps}, prestavka{" "}
+                      {exercise.recommendedRestMinSec}-{exercise.recommendedRestMaxSec} sek.
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        triggerTapHaptic();
+                        setExpandedCompletedMachineIds((current) => ({
+                          ...current,
+                          [exercise.machine.id]: true
+                        }));
+                      }}
+                      style={styles.compactToggleButton}
+                    >
+                      <Text style={styles.compactToggleButtonText}>Zobrazit detail</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <>
+                    <ExerciseRestBlock
+                      exercise={exercise}
+                      expandedWhyId={expandedWhyId}
+                      onToggleWhy={() => {
+                        triggerTapHaptic();
+                        setExpandedWhyId((current) =>
+                          current === exercise.machine.id ? null : exercise.machine.id
+                        );
+                      }}
+                      styles={styles}
+                    />
+                    <Text style={styles.selectionReason}>
+                      Preco tento cvik: {exercise.selectionReason}
+                    </Text>
+                    <Text style={styles.selectionReason}>
+                      Tempo: {exercise.tempoHint}
+                    </Text>
+                    {exercise.progressType ? (
+                      <Text style={styles.selectionReason}>
+                        Typ progresu: {exercise.progressType}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.machineCategory}>{exercise.machine.descriptionSk}</Text>
+                    <Pressable
+                      onPress={() => {
+                        triggerTapHaptic();
+                        setBusyMachineId((current) =>
+                          current === exercise.machine.id ? null : exercise.machine.id
+                        );
+                      }}
+                      style={styles.busyButton}
+                    >
+                      <Text style={styles.busyButtonText}>Stroj je obsadeny</Text>
+                    </Pressable>
+                    {busyMachineId === exercise.machine.id ? (
+                      <View style={styles.alternativeBox}>
+                        <Text style={styles.alternativeTitle}>Nahradne cviky</Text>
+                        {exercise.alternatives.length ? (
+                          exercise.alternatives.map((alternative) => (
+                            <Pressable
+                              key={alternative.id}
+                              onPress={() => {
+                                triggerTapHaptic();
+                                onOpenMachine(alternative);
+                              }}
+                              style={styles.alternativeItem}
+                            >
+                              <Text style={styles.alternativeName}>
+                                {alternative.displayNameSk}
+                              </Text>
+                              <Text style={styles.alternativeMeta}>
+                                {alternative.muscleGroup} | podobny ciel treningu
+                              </Text>
+                            </Pressable>
+                          ))
+                        ) : (
+                          <Text style={styles.alternativeMeta}>
+                            Zatial nemam dobru nahradu. Radsej preskoc a vrat sa k nemu neskor.
+                          </Text>
+                        )}
+                      </View>
+                    ) : null}
+                  </>
+                )}
                 <Pressable
                   onPress={() => {
                     triggerTapHaptic();
@@ -481,6 +738,20 @@ export function HomeScreen({
                 >
                   <Text style={styles.openMachineButtonText}>Otvorit stroj a zapisat vykon</Text>
                 </Pressable>
+                {isCompleted && !isCompletedCollapsed ? (
+                  <Pressable
+                    onPress={() => {
+                      triggerTapHaptic();
+                      setExpandedCompletedMachineIds((current) => ({
+                        ...current,
+                        [exercise.machine.id]: false
+                      }));
+                    }}
+                    style={styles.compactLinkButton}
+                  >
+                    <Text style={styles.compactLinkButtonText}>Schovat detail</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
             );
@@ -514,6 +785,14 @@ export function HomeScreen({
               orderLabel={`${trainerPlan.exercises.length + 2}. Koniec`}
               styles={styles}
               title="Schladenie po treningu"
+              isExpanded={expandedRoutineIds[COOLDOWN_ROUTINE_MACHINE_ID] ?? false}
+              onToggleExpanded={() => {
+                triggerTapHaptic();
+                setExpandedRoutineIds((current) => ({
+                  ...current,
+                  [COOLDOWN_ROUTINE_MACHINE_ID]: !current[COOLDOWN_ROUTINE_MACHINE_ID]
+                }));
+              }}
             />
           </SectionCard>
         </>
@@ -581,7 +860,20 @@ function ExerciseRestBlock({
       <Text style={styles.restSmallText}>
         Istota odporucania: {exercise.confidenceLabel} ({exercise.confidenceScore}/100)
       </Text>
+      {exercise.warmupSets.length ? (
+        <View style={styles.warmupBox}>
+          <Text style={styles.warmupTitle}>Rozcvicovacie serie pred pracovnou vahou</Text>
+          {exercise.warmupSets.map((warmupSet) => (
+            <Text key={`${exercise.machine.id}-${warmupSet.percent}`} style={styles.warmupText}>
+              {warmupSet.percent}%{warmupSet.weightKg ? ` | ${warmupSet.weightKg} kg` : ""} |{" "}
+              {warmupSet.reps} op. - {warmupSet.note}
+            </Text>
+          ))}
+        </View>
+      ) : null}
       {exercise.note ? <Text style={styles.restNote}>{exercise.note}</Text> : null}
+      {exercise.restFeedback ? <Text style={styles.restNote}>{exercise.restFeedback}</Text> : null}
+      {exercise.noEgoNote ? <Text style={styles.safetyNote}>{exercise.noEgoNote}</Text> : null}
       {exercise.safetyNote ? <Text style={styles.safetyNote}>{exercise.safetyNote}</Text> : null}
       <Pressable onPress={onToggleWhy} style={styles.restWhyButton}>
         <Text style={styles.restWhyLabel}>
@@ -638,6 +930,41 @@ function ReadinessChoiceRow<T extends string>({
   );
 }
 
+function VolumeRow({
+  item,
+  styles
+}: {
+  item: { label: string; sets: number; target: number; priority: "nizka" | "ok" | "vysoka" };
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const ratio = Math.min(1.4, item.sets / Math.max(1, item.target));
+  const widthPercent = `${Math.max(8, Math.min(100, ratio * 100))}%` as DimensionValue;
+
+  return (
+    <View style={styles.volumeRow}>
+      <View style={styles.volumeHeader}>
+        <Text style={styles.volumeLabel}>{item.label}</Text>
+        <Text style={styles.volumeValue}>
+          {item.sets}/{item.target} serii
+        </Text>
+      </View>
+      <View style={styles.volumeTrack}>
+        <View
+          style={[
+            styles.volumeFill,
+            item.priority === "vysoka"
+              ? styles.volumeFillHigh
+              : item.priority === "nizka"
+                ? styles.volumeFillLow
+                : styles.volumeFillOk,
+            { width: widthPercent }
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
 function RoutineTaskCard({
   durationMin,
   isCompleted,
@@ -647,7 +974,9 @@ function RoutineTaskCard({
   onCompleteRoutine,
   orderLabel,
   styles,
-  title
+  title,
+  isExpanded,
+  onToggleExpanded
 }: {
   durationMin: number;
   isCompleted: boolean;
@@ -662,7 +991,35 @@ function RoutineTaskCard({
   orderLabel: string;
   styles: ReturnType<typeof createStyles>;
   title: string;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
 }) {
+  const isCollapsed = isCompleted && !isExpanded;
+
+  if (isCollapsed) {
+    return (
+      <View
+        style={[
+          styles.routineCard,
+          styles.routineCardCompleted,
+          styles.routineCompactCard
+        ]}
+      >
+        <View style={styles.exerciseTopRow}>
+          <Tag label={orderLabel} />
+          <Text style={styles.completedLabel}>Hotovo</Text>
+        </View>
+        <Text style={styles.machineName}>{title}</Text>
+        <Text style={styles.completedCompactText}>
+          Hotovo v historii. Cas: {durationMin} min.
+        </Text>
+        <Pressable onPress={onToggleExpanded} style={styles.compactToggleButton}>
+          <Text style={styles.compactToggleButtonText}>Zobrazit detail</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.routineCard, isCompleted ? styles.routineCardCompleted : null]}>
       <View style={styles.exerciseTopRow}>
@@ -695,6 +1052,11 @@ function RoutineTaskCard({
           {isCompleted ? "Upravit zapis ako hotove" : "Oznacit ako hotove"}
         </Text>
       </Pressable>
+      {isCompleted ? (
+        <Pressable onPress={onToggleExpanded} style={styles.compactLinkButton}>
+          <Text style={styles.compactLinkButtonText}>Schovat detail</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -772,6 +1134,83 @@ function createStyles(colors: AppColors) {
   },
   durationButtonTextActive: {
     color: "#fff8ee"
+  },
+  setupDock: {
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.18)",
+    padding: 18,
+    gap: 10,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 1,
+    shadowRadius: 22,
+    elevation: 6
+  },
+  setupDockHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  setupDockEyebrow: {
+    color: colors.success,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase"
+  },
+  setupDockTitle: {
+    marginTop: 3,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+    lineHeight: 24
+  },
+  setupDockText: {
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: "700"
+  },
+  setupEditButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 9
+  },
+  setupEditButtonText: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  savedSetupBadge: {
+    borderRadius: 18,
+    backgroundColor: colors.success,
+    paddingHorizontal: 14,
+    paddingVertical: 11
+  },
+  savedSetupText: {
+    color: "#fff8ee",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900"
+  },
+  setupDoneButton: {
+    marginTop: 10,
+    borderRadius: 20,
+    backgroundColor: colors.success,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    alignItems: "center"
+  },
+  setupDoneButtonText: {
+    color: "#fff8ee",
+    fontSize: 16,
+    fontWeight: "900"
   },
   row: {
     flexDirection: "row",
@@ -924,6 +1363,9 @@ function createStyles(colors: AppColors) {
     shadowRadius: 18,
     elevation: 5
   },
+  routineCompactCard: {
+    gap: 8
+  },
   routineMetaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -954,6 +1396,48 @@ function createStyles(colors: AppColors) {
     shadowOpacity: 1,
     shadowRadius: 18,
     elevation: 5
+  },
+  completedCompactBox: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.18)",
+    padding: 14,
+    gap: 8
+  },
+  completedCompactTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 21
+  },
+  completedCompactText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700"
+  },
+  compactToggleButton: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    backgroundColor: colors.success,
+    paddingHorizontal: 13,
+    paddingVertical: 9
+  },
+  compactToggleButtonText: {
+    color: "#fff8ee",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  compactLinkButton: {
+    alignSelf: "flex-start",
+    marginTop: 2,
+    paddingVertical: 6
+  },
+  compactLinkButtonText: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: "900"
   },
   machineMeta: {
     padding: 16,
@@ -1033,6 +1517,27 @@ function createStyles(colors: AppColors) {
     fontSize: 13,
     lineHeight: 19
   },
+  warmupBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 10,
+    gap: 5
+  },
+  warmupTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  warmupText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700"
+  },
   restNote: {
     color: colors.success,
     fontSize: 13,
@@ -1064,6 +1569,90 @@ function createStyles(colors: AppColors) {
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "700"
+  },
+  busyButton: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.highlight,
+    backgroundColor: colors.highlightSoft,
+    paddingHorizontal: 13,
+    paddingVertical: 9
+  },
+  busyButtonText: {
+    color: colors.highlight,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  alternativeBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 12,
+    gap: 8
+  },
+  alternativeTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.6
+  },
+  alternativeItem: {
+    borderRadius: 14,
+    backgroundColor: colors.accentSoft,
+    padding: 11,
+    gap: 3
+  },
+  alternativeName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  alternativeMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18
+  },
+  volumeRow: {
+    marginBottom: 10,
+    gap: 6
+  },
+  volumeHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  volumeLabel: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  volumeValue: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  volumeTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.chipSurface,
+    overflow: "hidden"
+  },
+  volumeFill: {
+    height: "100%",
+    borderRadius: 999
+  },
+  volumeFillHigh: {
+    backgroundColor: colors.highlight
+  },
+  volumeFillOk: {
+    backgroundColor: colors.success
+  },
+  volumeFillLow: {
+    backgroundColor: colors.textMuted
   },
   openMachineButton: {
     marginTop: 8,

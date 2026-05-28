@@ -16,6 +16,7 @@ import { AppColors, useTheme } from "../theme";
 import {
   Machine,
   ReadinessPain,
+  TechniqueQuality,
   TrainingSetLog,
   UserExerciseProfile,
   WorkoutEntry,
@@ -55,6 +56,7 @@ type MachineDetailScreenProps = {
     rpe?: number;
     painLocation?: ReadinessPain;
     painLevel?: number;
+    techniqueQuality?: TechniqueQuality;
     setLogs?: TrainingSetLog[];
     note: string;
   }) => void;
@@ -78,6 +80,11 @@ const painLocationOptions: Array<{ value: ReadinessPain; label: string }> = [
 ];
 const rpeOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const painLevelOptions = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const techniqueOptions: Array<{ value: TechniqueQuality; label: string }> = [
+  { value: "cista", label: "cista" },
+  { value: "prijatelna", label: "prijatelna" },
+  { value: "zla", label: "zla" }
+];
 
 function clampSetCount(value: number) {
   return Math.min(8, Math.max(1, Math.round(value || 1)));
@@ -90,7 +97,8 @@ function createSetLog({
   rpe,
   painLocation,
   painLevel,
-  restSeconds
+  restSeconds,
+  techniqueQuality
 }: {
   index: number;
   weightKg?: number;
@@ -99,6 +107,7 @@ function createSetLog({
   painLocation: ReadinessPain;
   painLevel: number;
   restSeconds?: number;
+  techniqueQuality: TechniqueQuality;
 }): TrainingSetLog {
   return {
     id: `set-${index + 1}-${Date.now()}`,
@@ -109,6 +118,7 @@ function createSetLog({
     painLocation,
     painLevel,
     restSecondsUsed: restSeconds,
+    techniqueQuality,
     completed: false
   };
 }
@@ -159,7 +169,7 @@ export function MachineDetailScreen({
   const maxCardioDuration = cardioEntries.length
     ? Math.max(...cardioEntries.map((entry) => entry.durationMin ?? 0))
     : 0;
-  const trainingGuidance = getMachineTrainingGuidance(machine);
+  const trainingGuidance = getMachineTrainingGuidance(machine, latestEntry?.weightKg);
   const restText =
     trainingGuidance.recommendedRestMaxSec === 0
       ? "podla potreby"
@@ -188,6 +198,7 @@ export function MachineDetailScreen({
   const [rpe, setRpe] = React.useState(8);
   const [painLevel, setPainLevel] = React.useState(0);
   const [painLocation, setPainLocation] = React.useState<ReadinessPain>("nie");
+  const [techniqueQuality, setTechniqueQuality] = React.useState<TechniqueQuality>("cista");
   const [restSeconds, setRestSeconds] = React.useState(String(restTimerSeconds));
   const [setLogs, setSetLogs] = React.useState<TrainingSetLog[]>([]);
   const [activeRestTimer, setActiveRestTimer] = React.useState<{
@@ -224,6 +235,7 @@ export function MachineDetailScreen({
     setRpe(latestEntry?.rpe ?? 8);
     setPainLevel(latestEntry?.painLevel ?? 0);
     setPainLocation(latestEntry?.painLocation ?? "nie");
+    setTechniqueQuality(latestEntry?.techniqueQuality ?? "cista");
     setRestSeconds(
       latestEntry?.restSeconds ? String(latestEntry.restSeconds) : String(restTimerSeconds)
     );
@@ -233,6 +245,7 @@ export function MachineDetailScreen({
             ...setLog,
             id: `set-${index + 1}-${Date.now()}`,
             setNumber: index + 1,
+            techniqueQuality: setLog.techniqueQuality ?? latestEntry.techniqueQuality ?? "cista",
             completed: false
           }))
         : Array.from({ length: clampSetCount(latestEntry?.sets ?? 4) }, (_item, index) =>
@@ -243,7 +256,8 @@ export function MachineDetailScreen({
               rpe: latestEntry?.rpe ?? 8,
               painLocation: latestEntry?.painLocation ?? "nie",
               painLevel: latestEntry?.painLevel ?? 0,
-              restSeconds: latestEntry?.restSeconds ?? restTimerSeconds
+              restSeconds: latestEntry?.restSeconds ?? restTimerSeconds,
+              techniqueQuality: latestEntry?.techniqueQuality ?? "cista"
             })
           )
     );
@@ -321,7 +335,8 @@ export function MachineDetailScreen({
             rpe,
             painLocation,
             painLevel,
-            restSeconds: Number(restSeconds) || restTimerSeconds
+            restSeconds: Number(restSeconds) || restTimerSeconds,
+            techniqueQuality
           })
         )
       ];
@@ -382,7 +397,8 @@ export function MachineDetailScreen({
           ? setLog.painLocation ?? painLocation
           : "nie",
         painLevel: setLog.painLevel ?? painLevel,
-        restSecondsUsed: (setLog.restSecondsUsed ?? Number(restSeconds)) || restTimerSeconds
+        restSecondsUsed: (setLog.restSecondsUsed ?? Number(restSeconds)) || restTimerSeconds,
+        techniqueQuality: setLog.techniqueQuality ?? techniqueQuality
       })
     );
     const parsedSets = logsForSave.length;
@@ -416,6 +432,7 @@ export function MachineDetailScreen({
       rpe: averageRpe,
       painLocation: maxPainLevel > 0 ? painLocation : "nie",
       painLevel: maxPainLevel,
+      techniqueQuality,
       setLogs: logsForSave,
       feeling,
       note
@@ -524,6 +541,20 @@ export function MachineDetailScreen({
             hlavne svaly: {trainingGuidance.primaryMuscles.join(", ")}
           </Text>
           <Text style={styles.restSmallText}>Tempo: {trainingGuidance.tempoHint}</Text>
+          {trainingGuidance.warmupSets.length ? (
+            <View style={styles.warmupBox}>
+              <Text style={styles.warmupTitle}>Rozcvicovacie serie</Text>
+              {trainingGuidance.warmupSets.map((warmupSet) => (
+                <Text
+                  key={`${machine.id}-${warmupSet.percent}`}
+                  style={styles.warmupText}
+                >
+                  {warmupSet.percent}%{warmupSet.weightKg ? ` | ${warmupSet.weightKg} kg` : ""} |{" "}
+                  {warmupSet.reps} op. - {warmupSet.note}
+                </Text>
+              ))}
+            </View>
+          ) : null}
           <Pressable
             onPress={() => {
               triggerTapHaptic();
@@ -582,6 +613,11 @@ export function MachineDetailScreen({
                 {latestEntry.painLocation && latestEntry.painLocation !== "nie"
                   ? ` (${latestEntry.painLocation})`
                   : ""}
+              </Text>
+            ) : null}
+            {latestEntry.techniqueQuality ? (
+              <Text style={styles.note}>
+                Technika: {translateTechniqueQuality(latestEntry.techniqueQuality)}
               </Text>
             ) : null}
             <Text style={styles.note}>{latestEntry.note ?? "Bez poznamky."}</Text>
@@ -782,6 +818,39 @@ export function MachineDetailScreen({
               </View>
             </View>
 
+            <Text style={styles.fieldLabel}>Technika pohybu</Text>
+            <View style={styles.feelingRow}>
+              {techniqueOptions.map((option) => {
+                const isActive = techniqueQuality === option.value;
+
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => {
+                      triggerTapHaptic();
+                      setTechniqueQuality(option.value);
+                      setSetLogs((currentLogs) =>
+                        currentLogs.map((setLog) => ({
+                          ...setLog,
+                          techniqueQuality: option.value
+                        }))
+                      );
+                    }}
+                    style={[styles.feelingButton, isActive ? styles.feelingButtonActive : null]}
+                  >
+                    <Text
+                      style={[
+                        styles.feelingButtonText,
+                        isActive ? styles.feelingButtonTextActive : null
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
             <Text style={styles.fieldLabel}>Detailne serie</Text>
             {activeRestTimer ? (
               <View style={styles.timerCard}>
@@ -921,6 +990,35 @@ export function MachineDetailScreen({
                             ]}
                           >
                             {option}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text style={styles.setFieldLabel}>Technika serie</Text>
+                  <View style={styles.feelingRow}>
+                    {techniqueOptions.map((option) => {
+                      const isActive = (setLog.techniqueQuality ?? techniqueQuality) === option.value;
+
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => {
+                            triggerTapHaptic();
+                            updateSetLog(setLog.setNumber, { techniqueQuality: option.value });
+                          }}
+                          style={[
+                            styles.feelingButton,
+                            isActive ? styles.feelingButtonActive : null
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.feelingButtonText,
+                              isActive ? styles.feelingButtonTextActive : null
+                            ]}
+                          >
+                            {option.label}
                           </Text>
                         </Pressable>
                       );
@@ -1076,6 +1174,11 @@ export function MachineDetailScreen({
               {entry.rpe || entry.painLevel ? (
                 <Text style={styles.timelineText}>
                   RPE {entry.rpe ?? "-"} | bolest {entry.painLevel ?? 0}/10
+                </Text>
+              ) : null}
+              {entry.techniqueQuality ? (
+                <Text style={styles.timelineText}>
+                  Technika: {translateTechniqueQuality(entry.techniqueQuality)}
                 </Text>
               ) : null}
               {entry.setLogs?.length ? (
@@ -1619,6 +1722,27 @@ function createStyles(colors: AppColors) {
     fontSize: 13,
     lineHeight: 19
   },
+  warmupBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 10,
+    gap: 5
+  },
+  warmupTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  warmupText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700"
+  },
   restWhyButton: {
     alignSelf: "flex-start",
     marginTop: 2
@@ -1733,6 +1857,18 @@ function translateFeeling(feeling: WorkoutFeeling) {
   }
 
   return "bolest";
+}
+
+function translateTechniqueQuality(quality: TechniqueQuality) {
+  if (quality === "cista") {
+    return "cista";
+  }
+
+  if (quality === "prijatelna") {
+    return "prijatelna";
+  }
+
+  return "zla - najprv oprav pohyb, az potom vahu";
 }
 
 function translateExerciseType(type: string) {

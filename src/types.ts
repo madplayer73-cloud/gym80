@@ -34,12 +34,20 @@ export type ReadinessPain = "nie" | "koleno" | "rameno" | "chrbat" | "ine";
 
 export type ReadinessGoal = "normal" | "lahky" | "silovy" | "udrzat_rytmus";
 
+export type UserTrainingLevel =
+  | "zaciatocnik"
+  | "stredne_pokrocily"
+  | "pokrocily"
+  | "navrat_po_pauze";
+
 export type ReadinessCheck = {
   energia: ReadinessEnergy;
   spanok: ReadinessSleep;
   svalovica: ReadinessSoreness;
   bolest: ReadinessPain;
   cielDna: ReadinessGoal;
+  trainingLevel?: UserTrainingLevel;
+  noEgoMode?: boolean;
 };
 
 export type ExerciseType =
@@ -74,7 +82,10 @@ export type JointStressProfile = {
   knees?: "low" | "medium" | "high";
   shoulders?: "low" | "medium" | "high";
   lowerBack?: "low" | "medium" | "high";
+  elbows?: "low" | "medium" | "high";
 };
+
+export type TechniqueQuality = "cista" | "prijatelna" | "zla";
 
 export type Machine = {
   id: string;
@@ -98,7 +109,9 @@ export type Machine = {
   primaryMuscles?: string[];
   secondaryMuscles?: string[];
   fatigueCost?: FatigueCost;
+  fatigueOverlap?: string[];
   jointStress?: JointStressProfile;
+  incompatibleWithPatterns?: MovementPattern[];
   romBias?: RomBias;
   defaultRepMin?: number;
   defaultRepMax?: number;
@@ -117,6 +130,7 @@ export type TrainingSetLog = {
   painLocation?: ReadinessPain;
   painLevel?: number;
   restSecondsUsed?: number;
+  techniqueQuality?: TechniqueQuality;
   completed: boolean;
   completedAt?: string;
 };
@@ -135,6 +149,7 @@ export type WorkoutEntry = {
   rpe?: number;
   painLocation?: ReadinessPain;
   painLevel?: number;
+  techniqueQuality?: TechniqueQuality;
   setLogs?: TrainingSetLog[];
   note?: string;
   completedAt: string;
@@ -159,5 +174,6 @@ export type UserExerciseProfile = {
   lastPainLocation?: ReadinessPain;
   lastRpe?: number;
   lastRestSeconds?: number;
+  lastTechniqueQuality?: TechniqueQuality;
   updatedAt: string;
 };

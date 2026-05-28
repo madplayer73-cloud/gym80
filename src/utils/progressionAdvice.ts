@@ -154,7 +154,7 @@ function getStrengthEntries(entries: WorkoutEntry[]) {
 }
 
 export function getEntryProgressionAdvice(
-  entry?: Pick<WorkoutEntry, "weightKg" | "sets" | "reps" | "feeling">
+  entry?: Pick<WorkoutEntry, "weightKg" | "sets" | "reps" | "feeling" | "techniqueQuality">
 ): ProgressionAdvice | null {
   if (!entry) {
     return null;
@@ -168,6 +168,15 @@ export function getEntryProgressionAdvice(
   const sets = entry.sets ?? 0;
   const reps = entry.reps ?? 0;
   const feeling = entry.feeling;
+
+  if (entry.techniqueQuality === "zla") {
+    return {
+      level: "warning",
+      title: "Najprv technika",
+      message:
+        "Vaha sa nepocita ako plny progres, ked sa technika rozpadla. Nabuduce drz alebo uber a sprav cisty pohyb."
+    };
+  }
 
   if (feeling === "bolest") {
     return {
@@ -266,6 +275,24 @@ export function getTrendProgressionAdvice(
   const latestRir = getEstimatedRir(latest.feeling);
   const lastTwo = strengthEntries.slice(0, 2);
   const lastThree = strengthEntries.slice(0, 3);
+  const previous = lastTwo[1];
+
+  if (
+    latest.techniqueQuality === "zla" ||
+    (previous &&
+      (latest.weightKg ?? 0) > (previous.weightKg ?? 0) &&
+      latest.techniqueQuality &&
+      previous.techniqueQuality &&
+      latest.techniqueQuality !== "cista" &&
+      previous.techniqueQuality === "cista")
+  ) {
+    return withConfidence({
+      level: "warning",
+      title: "Kila isli hore, technika dole",
+      message:
+        "Toto nie je este plny progres. Najprv potvrd rovnaku vahu s cistejsou technikou, potom mozeme pridavat."
+    }, confidenceEntries, "hold_or_reduce");
+  }
   const allRecentAtTop =
     lastTwo.length >= 2 &&
     lastTwo.every((entry) => (entry.sets ?? 0) >= 3 && (entry.reps ?? 0) >= zone.max);
@@ -341,7 +368,7 @@ export function getPlannedProgressionAdvice({
   plannedSets,
   plannedReps
 }: {
-  latestEntry?: Pick<WorkoutEntry, "weightKg" | "sets" | "reps" | "feeling">;
+  latestEntry?: Pick<WorkoutEntry, "weightKg" | "sets" | "reps" | "feeling" | "techniqueQuality">;
   trendAdvice?: ProgressionAdvice | null;
   plannedWeightKg?: number;
   plannedSets?: number;

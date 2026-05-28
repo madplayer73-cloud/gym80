@@ -23,6 +23,7 @@ import {
   MuscleGroup,
   ReadinessCheck,
   ReadinessPain,
+  TechniqueQuality,
   TrainingSetLog,
   UserExerciseProfile,
   WorkoutFeeling,
@@ -273,7 +274,9 @@ function AppShell() {
       spanok: "priemerny",
       svalovica: "ziadna",
       bolest: "nie",
-      cielDna: "normal"
+      cielDna: "normal",
+      trainingLevel: "stredne_pokrocily",
+      noEgoMode: true
     } satisfies ReadinessCheck,
     hasStarted: false
   });
@@ -678,6 +681,7 @@ function AppShell() {
     rpe,
     painLocation,
     painLevel,
+    techniqueQuality,
     restSeconds,
     setLogs,
     note
@@ -693,6 +697,7 @@ function AppShell() {
     rpe?: number;
     painLocation?: ReadinessPain;
     painLevel?: number;
+    techniqueQuality?: TechniqueQuality;
     restSeconds?: number;
     setLogs?: TrainingSetLog[];
     note: string;
@@ -730,6 +735,7 @@ function AppShell() {
       rpe: effectiveRpe,
       painLocation: effectivePainLocation,
       painLevel: effectivePainLevel,
+      techniqueQuality,
       restSeconds,
       setLogs,
       note,
@@ -806,6 +812,7 @@ function AppShell() {
           lastPainLocation: effectivePainLocation,
           lastRpe: effectiveRpe,
           lastRestSeconds: restSeconds,
+          lastTechniqueQuality: techniqueQuality,
           updatedAt: workoutDate
         }
       };
