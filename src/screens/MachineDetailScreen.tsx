@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -266,7 +267,14 @@ export function MachineDetailScreen({
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const isCardio = machine.muscleGroup === "Kardio";
   const latestEntry = entries[0];
-  const machineImage = getMachineImage(machine.imageAsset);
+  const machineImages = React.useMemo(
+    () =>
+      [machine.imageAsset, ...(machine.imageAssets ?? [])]
+        .map((imageAsset) => getMachineImage(imageAsset))
+        .filter(Boolean) as Array<NonNullable<ReturnType<typeof getMachineImage>>>,
+    [machine]
+  );
+  const machineImage = machineImages[0] ?? null;
   const weightEntries = entries.filter((entry) => typeof entry.weightKg === "number");
   const cardioEntries = entries.filter((entry) => typeof entry.durationMin === "number");
   const maxWeight = weightEntries.length
@@ -314,6 +322,7 @@ export function MachineDetailScreen({
 
   const [isImageOpen, setIsImageOpen] = React.useState(false);
   const [isRestWhyOpen, setIsRestWhyOpen] = React.useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = React.useState(0);
   const [weightKg, setWeightKg] = React.useState("");
   const [sets, setSets] = React.useState("4");
   const [reps, setReps] = React.useState("10");
@@ -333,6 +342,7 @@ export function MachineDetailScreen({
     remainingSec: number;
   } | null>(null);
   const [note, setNote] = React.useState("");
+  const selectedMachineImage = machineImages[selectedImageIndex] ?? machineImage;
   const latestProgressionAdvice = !isCardio
     ? getTrendProgressionAdvice(entries, machine) ?? getEntryProgressionAdvice(latestEntry)
     : null;
@@ -690,11 +700,43 @@ export function MachineDetailScreen({
           <Pressable
             onPress={() => {
               triggerTapHaptic();
+              setSelectedImageIndex(0);
               setIsImageOpen(true);
             }}
           >
             <Image source={machineImage} style={styles.machineImage} resizeMode="cover" />
             <Text style={styles.imageHint}>Klikni na fotku pre vacsi nahlad</Text>
+          </Pressable>
+        ) : null}
+
+        {machineImages.length > 1 ? (
+          <View style={styles.galleryRow}>
+            {machineImages.map((imageSource, index) => (
+              <Pressable
+                key={`${machine.id}-image-${index}`}
+                onPress={() => {
+                  triggerTapHaptic();
+                  setSelectedImageIndex(index);
+                  setIsImageOpen(true);
+                }}
+                style={styles.galleryItem}
+              >
+                <Image source={imageSource} style={styles.galleryImage} resizeMode="cover" />
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {machine.videoUrl ? (
+          <Pressable
+            onPress={() => {
+              triggerTapHaptic();
+              Linking.openURL(machine.videoUrl!);
+            }}
+            style={styles.videoButton}
+          >
+            <Text style={styles.videoButtonLabel}>Nie je ti jasne, ako sa na tom cvici?</Text>
+            <Text style={styles.videoButtonHint}>Kukni video na YouTube.</Text>
           </Pressable>
         ) : null}
 
@@ -1478,8 +1520,8 @@ export function MachineDetailScreen({
           >
             <Text style={styles.modalCloseLabel}>Zavriet</Text>
           </Pressable>
-          {machineImage ? (
-            <Image source={machineImage} style={styles.modalImage} resizeMode="contain" />
+          {selectedMachineImage ? (
+            <Image source={selectedMachineImage} style={styles.modalImage} resizeMode="contain" />
           ) : null}
         </View>
       </Modal>
@@ -1573,6 +1615,45 @@ function createStyles(colors: AppColors) {
     marginTop: 8,
     fontSize: 13,
     color: colors.textMuted
+  },
+  galleryRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+    flexWrap: "wrap"
+  },
+  galleryItem: {
+    width: 84,
+    height: 64,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface
+  },
+  galleryImage: {
+    width: "100%",
+    height: "100%"
+  },
+  videoButton: {
+    marginTop: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.highlight,
+    backgroundColor: colors.highlightSoft,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 3
+  },
+  videoButtonLabel: {
+    color: colors.highlight,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  videoButtonHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700"
   },
   description: {
     fontSize: 15,

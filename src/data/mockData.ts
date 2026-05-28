@@ -168,6 +168,11 @@ export const mockMachines: Machine[] = [
     descriptionSk:
       "Stroj na bicepsovy zdvih s opretimi rukami. Precvičuje hlavne bicepsy.",
     imageAsset: "bicepsovy-zdvih.jpg",
+    imageAssets: [
+      "bicepsovy-zdvih-opierka-overview.jpg",
+      "bicepsovy-zdvih-opierka-nc.webp"
+    ],
+    videoUrl: "https://youtu.be/drpIj2RZmEU?si=OJY-EJsF8kiRuMmH",
     setupNoteLabel: "Seat height"
   },
   {

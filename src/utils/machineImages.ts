@@ -3,6 +3,8 @@ import { ImageSourcePropType } from "react-native";
 const machineImages: Record<string, ImageSourcePropType> = {
   "bezecky-pas.jpg": require("../../assets/machines/bezecky-pas.jpg"),
   "bicepsovy-zdvih-v-sede.jpg": require("../../assets/machines/bicepsovy-zdvih-v-sede.jpg"),
+  "bicepsovy-zdvih-opierka-nc.webp": require("../../assets/machines/bicepsovy-zdvih-opierka-nc.webp"),
+  "bicepsovy-zdvih-opierka-overview.jpg": require("../../assets/machines/bicepsovy-zdvih-opierka-overview.jpg"),
   "predkopavanie.jpg": require("../../assets/machines/predkopavanie.jpg"),
   "zakopavanie.jpg": require("../../assets/machines/zakopavanie.jpg"),
   "lytka-v-stoji.jpg": require("../../assets/machines/lytka-v-stoji.jpg"),

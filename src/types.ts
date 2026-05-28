@@ -99,6 +99,8 @@ export type Machine = {
   imageHint: string;
   descriptionSk: string;
   imageAsset?: string;
+  imageAssets?: string[];
+  videoUrl?: string;
   setupNoteLabel?: string;
   subgroup?: string;
   exerciseType?: ExerciseType;
