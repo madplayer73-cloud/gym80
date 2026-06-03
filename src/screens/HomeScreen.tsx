@@ -514,80 +514,6 @@ export function HomeScreen({
         </View>
       ) : (
         <>
-      <SectionCard
-        title="Co viem z historie"
-        subtitle="Toto je zaklad, z ktoreho trener sklada navrh."
-      >
-        <View style={styles.row}>
-          <StatChip label="Priemer" value={`${trainerPlan.stats.averageWorkoutDurationMin} min`} />
-          <StatChip label="Cviky/trening" value={String(trainerPlan.stats.averageExercisesPerWorkout)} />
-          <StatChip label="Cviky/60 min" value={String(trainerPlan.stats.exercisesPer60Min)} />
-        </View>
-        <Text style={styles.tipText}>
-          Najcastejsia kombinacia: {trainerPlan.stats.commonMuscleGroupCombination}
-        </Text>
-        <Text style={styles.tipText}>
-          Casto pouzivane: {trainerPlan.stats.frequentMachines.length} | Obcas:
-          {" "}{trainerPlan.stats.occasionalMachines.length} | Este nepouzite:
-          {" "}{trainerPlan.stats.neverUsedMachines.length}
-        </Text>
-        <Text style={styles.tipText}>
-          Tyzdenny stimul: {trainerPlan.stats.weeklyState.topNeeds.length > 0
-            ? `najviac chyba ${trainerPlan.stats.weeklyState.topNeeds.join(", ")}`
-            : "zatial zbieram data z tohto tyzdna"}
-        </Text>
-        <Text style={styles.tipText}>
-          Unava z tazkych cvikov: {trainerPlan.stats.weeklyState.axialFatigueScore} bodov
-        </Text>
-      </SectionCard>
-
-          <SectionCard
-            title="Tyzdenny report trenera"
-            subtitle="Kratky servisny protokol: co rastie, co chyba a kde netreba frajerit."
-          >
-            <View style={styles.row}>
-              <StatChip label="Treningy" value={String(trainerPlan.weeklyReport.workoutCount)} />
-              <StatChip
-                label="Podtrenovane"
-                value={String(trainerPlan.weeklyReport.undertrainedMuscles.length)}
-              />
-              <StatChip
-                label="Bolest"
-                value={String(trainerPlan.weeklyReport.painWarnings.length)}
-              />
-            </View>
-            <Text style={styles.tipText}>
-              Najlepsi progres: {trainerPlan.weeklyReport.bestProgress}
-            </Text>
-            <Text style={styles.tipText}>
-              Odporucanie: {trainerPlan.weeklyReport.nextWeekRecommendation}
-            </Text>
-            {trainerPlan.weeklyReport.highStressAreas.length ? (
-              <Text style={styles.safetyNote}>
-                Vysoka zataz: {trainerPlan.weeklyReport.highStressAreas.join(", ")}
-              </Text>
-            ) : null}
-            {trainerPlan.weeklyReport.painWarnings.slice(0, 3).map((warning) => (
-              <Text key={warning} style={styles.safetyNote}>
-                {warning}
-              </Text>
-            ))}
-          </SectionCard>
-
-          <SectionCard
-            title="Prioritny dashboard"
-            subtitle="Zelena je v norme. Oranzova znamena, ze tomu trener da nabuduce viac pozornosti."
-          >
-            <Text style={styles.optionLabel}>Svalove partie</Text>
-            {trainerPlan.weeklyReport.volumeByMuscle.slice(0, 10).map((item) => (
-              <VolumeRow key={item.label} item={item} styles={styles} />
-            ))}
-            <Text style={styles.optionLabel}>Pohybove vzory</Text>
-            {trainerPlan.weeklyReport.volumeByPattern.slice(0, 8).map((item) => (
-              <VolumeRow key={item.label} item={item} styles={styles} />
-            ))}
-          </SectionCard>
-
           <SectionCard
             title="Rozcvicka"
             subtitle="Prvy bod treningu. Oznac ako hotove, aby bola rozcvicka aj v historii."
@@ -794,6 +720,80 @@ export function HomeScreen({
                 }));
               }}
             />
+          </SectionCard>
+
+          <SectionCard
+            title="Co viem z historie"
+            subtitle="Toto je zaklad, z ktoreho trener sklada navrh."
+          >
+            <View style={styles.row}>
+              <StatChip label="Priemer" value={`${trainerPlan.stats.averageWorkoutDurationMin} min`} />
+              <StatChip label="Cviky/trening" value={String(trainerPlan.stats.averageExercisesPerWorkout)} />
+              <StatChip label="Cviky/60 min" value={String(trainerPlan.stats.exercisesPer60Min)} />
+            </View>
+            <Text style={styles.tipText}>
+              Najcastejsia kombinacia: {trainerPlan.stats.commonMuscleGroupCombination}
+            </Text>
+            <Text style={styles.tipText}>
+              Casto pouzivane: {trainerPlan.stats.frequentMachines.length} | Obcas:
+              {" "}{trainerPlan.stats.occasionalMachines.length} | Este nepouzite:
+              {" "}{trainerPlan.stats.neverUsedMachines.length}
+            </Text>
+            <Text style={styles.tipText}>
+              Tyzdenny stimul: {trainerPlan.stats.weeklyState.topNeeds.length > 0
+                ? `najviac chyba ${trainerPlan.stats.weeklyState.topNeeds.join(", ")}`
+                : "zatial zbieram data z tohto tyzdna"}
+            </Text>
+            <Text style={styles.tipText}>
+              Unava z tazkych cvikov: {trainerPlan.stats.weeklyState.axialFatigueScore} bodov
+            </Text>
+          </SectionCard>
+
+          <SectionCard
+            title="Tyzdenny report trenera"
+            subtitle="Kratky servisny protokol: co rastie, co chyba a kde netreba frajerit."
+          >
+            <View style={styles.row}>
+              <StatChip label="Treningy" value={String(trainerPlan.weeklyReport.workoutCount)} />
+              <StatChip
+                label="Podtrenovane"
+                value={String(trainerPlan.weeklyReport.undertrainedMuscles.length)}
+              />
+              <StatChip
+                label="Bolest"
+                value={String(trainerPlan.weeklyReport.painWarnings.length)}
+              />
+            </View>
+            <Text style={styles.tipText}>
+              Najlepsi progres: {trainerPlan.weeklyReport.bestProgress}
+            </Text>
+            <Text style={styles.tipText}>
+              Odporucanie: {trainerPlan.weeklyReport.nextWeekRecommendation}
+            </Text>
+            {trainerPlan.weeklyReport.highStressAreas.length ? (
+              <Text style={styles.safetyNote}>
+                Vysoka zataz: {trainerPlan.weeklyReport.highStressAreas.join(", ")}
+              </Text>
+            ) : null}
+            {trainerPlan.weeklyReport.painWarnings.slice(0, 3).map((warning) => (
+              <Text key={warning} style={styles.safetyNote}>
+                {warning}
+              </Text>
+            ))}
+          </SectionCard>
+
+          <SectionCard
+            title="Prioritny dashboard"
+            subtitle="Zelena je v norme. Oranzova znamena, ze tomu trener da nabuduce viac pozornosti."
+          >
+            <Text style={styles.optionLabel}>Svalove partie</Text>
+            {trainerPlan.weeklyReport.volumeByMuscle.slice(0, 10).map((item) => (
+              <VolumeRow key={item.label} item={item} styles={styles} />
+            ))}
+            <Text style={styles.optionLabel}>Pohybove vzory</Text>
+            {trainerPlan.weeklyReport.volumeByPattern.slice(0, 8).map((item) => (
+              <VolumeRow key={item.label} item={item} styles={styles} />
+            ))}
           </SectionCard>
         </>
       )}

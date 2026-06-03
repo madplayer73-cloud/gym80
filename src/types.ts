@@ -130,6 +130,7 @@ export type TrainingSetLog = {
   setNumber: number;
   setType?: TrainingSetType;
   targetPercent?: number;
+  manualOverride?: boolean;
   weightKg?: number;
   reps?: number;
   rpe?: number;

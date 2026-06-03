@@ -24,7 +24,11 @@ import {
   WorkoutEntry,
   WorkoutFeeling
 } from "../types";
-import { triggerSuccessHaptic, triggerTapHaptic } from "../utils/haptics";
+import {
+  triggerRestCompleteHaptic,
+  triggerSuccessHaptic,
+  triggerTapHaptic
+} from "../utils/haptics";
 import { getMachineImage } from "../utils/machineImages";
 import {
   getEntryProgressionAdvice,
@@ -80,7 +84,6 @@ const painLocationOptions: Array<{ value: ReadinessPain; label: string }> = [
   { value: "chrbat", label: "chrbat" },
   { value: "ine", label: "ine" }
 ];
-const rpeOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const painLevelOptions = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const techniqueOptions: Array<{ value: TechniqueQuality; label: string }> = [
   { value: "cista", label: "cista" },
@@ -180,7 +183,7 @@ function createSetLog({
 
 function syncSetWeightsForWorkingWeight(logs: TrainingSetLog[], workingWeightKg: number) {
   return logs.map((setLog) => {
-    if (setLog.completed) {
+    if (setLog.completed || setLog.manualOverride) {
       return setLog;
     }
 
@@ -223,10 +226,12 @@ function playRestDoneSound() {
     }
 
     const audioContext = new AudioContextCtor();
+    void audioContext.resume?.();
     const beeps = [
-      { delayMs: 0, durationMs: 90, frequency: 880 },
-      { delayMs: 170, durationMs: 90, frequency: 980 },
-      { delayMs: 360, durationMs: 240, frequency: 1160 }
+      { delayMs: 0, durationMs: 120, frequency: 920 },
+      { delayMs: 210, durationMs: 120, frequency: 920 },
+      { delayMs: 440, durationMs: 170, frequency: 1080 },
+      { delayMs: 720, durationMs: 340, frequency: 1280 }
     ];
 
     beeps.forEach((beep) => {
@@ -237,7 +242,7 @@ function playRestDoneSound() {
         oscillator.type = "sine";
         oscillator.frequency.value = beep.frequency;
         gain.gain.setValueAtTime(0.001, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.2, audioContext.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.48, audioContext.currentTime + 0.02);
         gain.gain.exponentialRampToValueAtTime(
           0.001,
           audioContext.currentTime + beep.durationMs / 1000
@@ -337,6 +342,8 @@ export function MachineDetailScreen({
   const [restSeconds, setRestSeconds] = React.useState(String(restTimerSeconds));
   const [setLogs, setSetLogs] = React.useState<TrainingSetLog[]>([]);
   const [collapsedSetIds, setCollapsedSetIds] = React.useState<Record<string, boolean>>({});
+  const [isWarmupConfirmed, setIsWarmupConfirmed] = React.useState(false);
+  const [isWarmupDismissed, setIsWarmupDismissed] = React.useState(false);
   const [activeRestTimer, setActiveRestTimer] = React.useState<{
     setNumber: number;
     remainingSec: number;
@@ -355,6 +362,11 @@ export function MachineDetailScreen({
         plannedReps: Number(reps)
       })
     : null;
+
+  React.useEffect(() => {
+    setIsWarmupConfirmed(false);
+    setIsWarmupDismissed(false);
+  }, [machine.id, latestEntry?.id]);
 
   React.useEffect(() => {
     const suggestedWorkingWeight = getSuggestedWorkingWeight(latestEntry, trainingGuidance);
@@ -380,22 +392,7 @@ export function MachineDetailScreen({
     setRestSeconds(
       latestEntry?.restSeconds ? String(latestEntry.restSeconds) : String(restTimerSeconds)
     );
-    const warmupLogs = trainingGuidance.warmupSets.map((warmupSet, index) =>
-      createSetLog({
-        index,
-        weightKg:
-          warmupSet.weightKg ??
-          getWarmupWeight(suggestedWorkingWeight, warmupSet.percent),
-        reps: warmupSet.reps,
-        rpe: 5,
-        painLocation: latestEntry?.painLocation ?? "nie",
-        painLevel: latestEntry?.painLevel ?? 0,
-        restSeconds: latestEntry?.restSeconds ?? restTimerSeconds,
-        techniqueQuality: latestEntry?.techniqueQuality ?? "cista",
-        setType: "warmup",
-        targetPercent: warmupSet.percent
-      })
-    );
+    const warmupLogs: TrainingSetLog[] = [];
     const existingWorkingLogs =
       latestEntry?.setLogs
         ?.filter((setLog) => setLog.setType !== "warmup")
@@ -441,7 +438,7 @@ export function MachineDetailScreen({
     if (activeRestTimer.remainingSec <= 0) {
       setActiveRestTimer(null);
       playRestDoneSound();
-      triggerSuccessHaptic();
+      triggerRestCompleteHaptic();
       return;
     }
 
@@ -484,9 +481,40 @@ export function MachineDetailScreen({
       currentLogs.map((setLog) =>
         setLog.setType === "warmup" || setLog.completed
           ? setLog
-          : { ...setLog, reps: parsedReps }
+          : setLog.manualOverride
+            ? setLog
+            : { ...setLog, reps: parsedReps }
       )
     );
+  };
+
+  const addSuggestedWarmupSets = () => {
+    const workingWeight = Number(weightKg) || getSuggestedWorkingWeight(latestEntry, trainingGuidance);
+    const warmupLogs = trainingGuidance.warmupSets.map((warmupSet, index) =>
+      createSetLog({
+        index,
+        weightKg:
+          warmupSet.weightKg ??
+          getWarmupWeight(workingWeight, warmupSet.percent),
+        reps: warmupSet.reps,
+        rpe: 5,
+        painLocation: "nie",
+        painLevel: 0,
+        restSeconds: Number(restSeconds) || restTimerSeconds,
+        techniqueQuality,
+        setType: "warmup",
+        targetPercent: warmupSet.percent
+      })
+    );
+
+    setSetLogs((currentLogs) => {
+      const workingLogs = currentLogs.filter((setLog) => setLog.setType !== "warmup");
+
+      return [...warmupLogs, ...workingLogs].map((setLog, index) => ({
+        ...setLog,
+        setNumber: index + 1
+      }));
+    });
   };
 
   const updateSetLog = (
@@ -597,13 +625,11 @@ export function MachineDetailScreen({
         completedAt: setLog.completedAt ?? new Date().toISOString(),
         weightKg: setLog.weightKg ?? parsedWeight,
         reps: setLog.reps ?? Number(reps),
-        rpe: setLog.rpe ?? rpe,
-        painLocation: (setLog.painLevel ?? painLevel) > 0
-          ? setLog.painLocation ?? painLocation
-          : "nie",
-        painLevel: setLog.painLevel ?? painLevel,
+        rpe,
+        painLocation: painLevel > 0 ? painLocation : "nie",
+        painLevel,
         restSecondsUsed: (setLog.restSecondsUsed ?? Number(restSeconds)) || restTimerSeconds,
-        techniqueQuality: setLog.techniqueQuality ?? techniqueQuality
+        techniqueQuality
       })
     );
     const workingLogsForSave = logsForSave.filter((setLog) => setLog.setType !== "warmup");
@@ -991,6 +1017,55 @@ export function MachineDetailScreen({
             ) : null}
           </View>
         ) : null}
+            {trainingGuidance.warmupSets.length && !isWarmupConfirmed && !isWarmupDismissed ? (
+              <View style={styles.warmupSuggestionCard}>
+                <Text style={styles.warmupSuggestionTitle}>AI navrhuje rozcvicku</Text>
+                <Text style={styles.warmupSuggestionText}>
+                  Tento cvik alebo vaha uz patri medzi narocnejsie. Dve lahke serie pomozu
+                  prehriat klby, svaly a znizit riziko pretazenia.
+                </Text>
+                <View style={styles.warmupSuggestionList}>
+                  {trainingGuidance.warmupSets.map((warmupSet) => (
+                    <Text key={`${machine.id}-suggest-${warmupSet.percent}`} style={styles.warmupText}>
+                      {warmupSet.percent}% |{" "}
+                      {getWarmupWeight(Number(weightKg), warmupSet.percent) ??
+                        warmupSet.weightKg ??
+                        "-"}{" "}
+                      kg | {warmupSet.reps} op.
+                    </Text>
+                  ))}
+                </View>
+                <View style={styles.warmupSuggestionActions}>
+                  <Pressable
+                    onPress={() => {
+                      triggerSuccessHaptic();
+                      addSuggestedWarmupSets();
+                      setIsWarmupConfirmed(true);
+                    }}
+                    style={styles.warmupSuggestionPrimary}
+                  >
+                    <Text style={styles.warmupSuggestionPrimaryText}>Ano, pridaj rozcvicku</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      triggerTapHaptic();
+                      setIsWarmupDismissed(true);
+                    }}
+                    style={styles.warmupSuggestionSecondary}
+                  >
+                    <Text style={styles.warmupSuggestionSecondaryText}>Dnes netreba</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+            {trainingGuidance.warmupSets.length && isWarmupConfirmed ? (
+              <View style={styles.warmupConfirmedCard}>
+                <Text style={styles.warmupConfirmedText}>
+                  Rozcvicka pridana hore pred pracovne serie. Kg aj opakovania vies stale rucne
+                  upravit.
+                </Text>
+              </View>
+            ) : null}
             <Text style={styles.fieldLabel}>Navrhovana vaha</Text>
             <View style={styles.weightAdjustRow}>
               <Pressable onPress={() => adjustWeight(-2.5)} style={styles.adjustButton}>
@@ -1046,15 +1121,6 @@ export function MachineDetailScreen({
                   style={styles.smallInput}
                 />
               </View>
-              <View style={styles.inlineField}>
-                <Text style={styles.fieldLabel}>RPE celkovo 1-10</Text>
-                <TextInput
-                  value={String(rpe)}
-                  onChangeText={(value) => setRpe(Math.min(10, Math.max(1, Number(value) || 1)))}
-                  keyboardType="number-pad"
-                  style={styles.smallInput}
-                />
-              </View>
             </View>
 
             <Text style={styles.fieldLabel}>Technika pohybu</Text>
@@ -1090,7 +1156,7 @@ export function MachineDetailScreen({
               })}
             </View>
 
-            <Text style={styles.fieldLabel}>Detailne serie</Text>
+            <Text style={styles.fieldLabel}>Serie k tomuto cviku</Text>
             {activeRestTimer ? (
               <View style={styles.timerCard}>
                 <Text style={styles.timerTitle}>
@@ -1142,8 +1208,7 @@ export function MachineDetailScreen({
                       <View style={styles.collapsedSetTextWrap}>
                         <Text style={styles.collapsedSetTitle}>OK {setTitle}</Text>
                         <Text style={styles.collapsedSetMeta}>
-                          {setLog.weightKg ?? 0} kg x {setLog.reps ?? 0} op. | RPE{" "}
-                          {setLog.rpe ?? "-"}
+                          {setLog.weightKg ?? 0} kg x {setLog.reps ?? 0} op.
                         </Text>
                       </View>
                       <Pressable
@@ -1218,6 +1283,7 @@ export function MachineDetailScreen({
                           value={setLog.weightKg ? String(setLog.weightKg) : weightKg}
                           onChangeText={(value) =>
                             updateSetLog(setLog.setNumber, {
+                              manualOverride: true,
                               weightKg: Number(value) || undefined
                             })
                           }
@@ -1231,6 +1297,7 @@ export function MachineDetailScreen({
                           value={setLog.reps ? String(setLog.reps) : reps}
                           onChangeText={(value) =>
                             updateSetLog(setLog.setNumber, {
+                              manualOverride: true,
                               reps: Number(value) || undefined
                             })
                           }
@@ -1239,96 +1306,6 @@ export function MachineDetailScreen({
                         />
                       </View>
                     </View>
-                    <Text style={styles.setFieldLabel}>RPE serie</Text>
-                    <View style={styles.choiceRow}>
-                      {rpeOptions.map((option) => {
-                        const isActive = (setLog.rpe ?? rpe) === option;
-
-                        return (
-                          <Pressable
-                            key={option}
-                            onPress={() => {
-                              triggerTapHaptic();
-                              updateSetLog(setLog.setNumber, { rpe: option });
-                            }}
-                            style={[
-                              styles.choiceButton,
-                              isActive ? styles.choiceButtonActive : null
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.choiceButtonText,
-                                isActive ? styles.choiceButtonTextActive : null
-                              ]}
-                            >
-                              {option}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <Text style={styles.setFieldLabel}>Bolest 0-10</Text>
-                    <View style={styles.choiceRow}>
-                      {painLevelOptions.map((option) => {
-                        const isActive = (setLog.painLevel ?? painLevel) === option;
-
-                        return (
-                          <Pressable
-                            key={option}
-                            onPress={() => {
-                              triggerTapHaptic();
-                              updateSetLog(setLog.setNumber, { painLevel: option });
-                            }}
-                            style={[
-                              styles.choiceButton,
-                              isActive ? styles.painChoiceButtonActive : null
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.choiceButtonText,
-                                isActive ? styles.choiceButtonTextActive : null
-                              ]}
-                            >
-                              {option}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <Text style={styles.setFieldLabel}>Technika serie</Text>
-                    <View style={styles.feelingRow}>
-                      {techniqueOptions.map((option) => {
-                        const isActive =
-                          (setLog.techniqueQuality ?? techniqueQuality) === option.value;
-
-                        return (
-                          <Pressable
-                            key={option.value}
-                            onPress={() => {
-                              triggerTapHaptic();
-                              updateSetLog(setLog.setNumber, {
-                                techniqueQuality: option.value
-                              });
-                            }}
-                            style={[
-                              styles.feelingButton,
-                              isActive ? styles.feelingButtonActive : null
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.feelingButtonText,
-                                isActive ? styles.feelingButtonTextActive : null
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
                   </View>
                 );
               })}
@@ -1336,7 +1313,7 @@ export function MachineDetailScreen({
           </>
         )}
 
-        <Text style={styles.fieldLabel}>Pocit zo serie</Text>
+        <Text style={styles.fieldLabel}>Pocit po cviku</Text>
         <View style={styles.feelingRow}>
           {feelingOptions.map((option) => {
             const isActive = feeling === option.value;
@@ -1362,6 +1339,22 @@ export function MachineDetailScreen({
             );
           })}
         </View>
+
+        {!isCardio ? (
+          <>
+            <Text style={styles.fieldLabel}>Kolko opakovani by si este dal? (RPE 1-10)</Text>
+            <Text style={styles.helperText}>
+              RPE 8 znamena asi 2 opakovania v rezerve. RPE 10 znamena, ze dalsie by uz
+              neslo cisto.
+            </Text>
+            <TextInput
+              value={String(rpe)}
+              onChangeText={(value) => setRpe(Math.min(10, Math.max(1, Number(value) || 1)))}
+              keyboardType="number-pad"
+              style={styles.smallInput}
+            />
+          </>
+        ) : null}
 
         <Text style={styles.fieldLabel}>Bolest celkovo 0-10</Text>
         <View style={styles.choiceRow}>
@@ -1686,6 +1679,13 @@ function createStyles(colors: AppColors) {
     fontSize: 14,
     fontWeight: "700",
     color: colors.text,
+    marginBottom: 8
+  },
+  helperText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -4,
     marginBottom: 8
   },
   weightAdjustRow: {
@@ -2138,6 +2138,71 @@ function createStyles(colors: AppColors) {
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "700"
+  },
+  warmupSuggestionCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.highlight,
+    backgroundColor: colors.highlightSoft,
+    padding: 14,
+    gap: 10,
+    marginBottom: 12
+  },
+  warmupSuggestionTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  warmupSuggestionText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  warmupSuggestionList: {
+    gap: 3
+  },
+  warmupSuggestionActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  warmupSuggestionPrimary: {
+    borderRadius: 999,
+    backgroundColor: colors.highlight,
+    paddingHorizontal: 14,
+    paddingVertical: 11
+  },
+  warmupSuggestionPrimaryText: {
+    color: "#fff8ee",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  warmupSuggestionSecondary: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 11
+  },
+  warmupSuggestionSecondaryText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  warmupConfirmedCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.16)",
+    padding: 12,
+    marginBottom: 12
+  },
+  warmupConfirmedText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "800"
   },
   restWhyButton: {
     alignSelf: "flex-start",

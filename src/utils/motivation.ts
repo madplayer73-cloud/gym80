@@ -431,9 +431,23 @@ export function buildMotivationMessage({
 }
 
 export function buildRoutineMotivationMessage(type: "warmup" | "cooldown") {
-  if (type === "warmup") {
-    return "🔥 Rozcvicka hotova. Motor bezi, teraz ideme na zelezo.";
-  }
+  const warmupMessages = [
+    "🔥 Rozcvicka hotova. Motor bezi, teraz ideme na zelezo.",
+    "⚙️ Telo je nahriate. Teraz nech stroje zistia, kto prisiel.",
+    "✅ Rozcvicka splnena. Klby dakuju, svaly sa tvaria odvazne.",
+    "🚦 Start vybaveny. Teraz prepneme z rezimu cestovania na rezim rastu.",
+    "💪 Rozcvicka doma. Ziadne ego, len cisty vykon.",
+    "🧠 Telo dostalo signal. Ideme mudro, ale nie makko."
+  ];
+  const cooldownMessages = [
+    "🧘 Schladenie hotove. Regeneracia uz vie, ze ma robotu.",
+    "✅ Koniec uhladeny. Svaly dostali trening aj diplomaticky odchod.",
+    "🌿 Schladenie zapisane. Zajtra sa ti telo podakuje menej dramaticky.",
+    "🛠️ Hotovo. Teraz sa opravuje, rastie a tvari sa, ze nic neboli.",
+    "👏 Pekne uzavrete. Trening nie je len start, ale aj dobry pristav.",
+    "😌 Schladenie doma. Nervovy system si prave vydychol."
+  ];
+  const messages = type === "warmup" ? warmupMessages : cooldownMessages;
 
-  return "🧘 Schladenie hotove. Regeneracia uz vie, ze ma robotu.";
+  return messages[Math.floor(Date.now() / 1000) % messages.length];
 }
