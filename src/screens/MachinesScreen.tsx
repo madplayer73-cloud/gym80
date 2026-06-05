@@ -75,10 +75,15 @@ export function MachinesScreen({
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredMachines = machines.filter((machine) => {
+    const searchableCodes = getMachineSearchCodes(machine);
     const matchesSearch =
       normalizedQuery.length === 0 ||
       machine.displayNameSk.toLowerCase().includes(normalizedQuery) ||
-      machine.descriptionSk.toLowerCase().includes(normalizedQuery);
+      machine.descriptionSk.toLowerCase().includes(normalizedQuery) ||
+      machine.modelName.toLowerCase().includes(normalizedQuery) ||
+      machine.id.toLowerCase().includes(normalizedQuery) ||
+      machine.muscleGroup.toLowerCase().includes(normalizedQuery) ||
+      searchableCodes.some((code) => code.includes(normalizedQuery));
 
     if (selectedFilter === "Oblubene") {
       return favoriteMachineIdSet.has(machine.id) && matchesSearch;
@@ -147,7 +152,7 @@ export function MachinesScreen({
       <TextInput
         value={searchQuery}
         onChangeText={setSearchQuery}
-        placeholder="Hladaj stroj alebo partiu"
+        placeholder="Hladaj stroj, partiu alebo cislo"
         placeholderTextColor={colors.textMuted}
         style={styles.searchInput}
       />
@@ -357,4 +362,17 @@ function translateSetupLabel(label: string) {
   }
 
   return label.toLowerCase();
+}
+
+function getMachineSearchCodes(machine: Machine) {
+  const imageNames = [machine.imageAsset, ...(machine.imageAssets ?? [])].filter(
+    (imageName): imageName is string => Boolean(imageName)
+  );
+
+  return imageNames.flatMap((imageName) => {
+    const fileNameMatch = imageName.match(/^(\d{3,})/);
+    const allNumberMatches = imageName.match(/\d{3,}/g) ?? [];
+
+    return Array.from(new Set([fileNameMatch?.[1], ...allNumberMatches].filter(Boolean))) as string[];
+  });
 }

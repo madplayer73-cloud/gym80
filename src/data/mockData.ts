@@ -11,7 +11,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated leg extension with ankle roller pad",
     descriptionSk:
       "Stroj na predkopavanie v sede. Precvičuje hlavne prednu cast stehien.",
-    imageAsset: "predkopavanie.jpg",
+    imageAsset: "3001_predkopavanie_1.webp",
+    imageAssets: [
+      "3001_predkopavanie_2.webp"
+    ],
+    videoUrl: "https://youtu.be/9v7u3ofd9vA?si=H9BTJo6oTXPxb-kL",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -24,7 +28,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated leg curl with upper and lower roller pads",
     descriptionSk:
       "Stroj na zakopavanie v sede. Precvičuje hlavne zadnu cast stehien.",
-    imageAsset: "zakopavanie.jpg",
+    imageAsset: "3003_zakopavanie_1.webp",
+    imageAssets: [
+      "3003_zakopavanie_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/hEW553x_QTM?si=5bUpzYpQT31Y-gmP",
     setupNoteLabel: "Back pad position"
   },
   {
@@ -50,7 +58,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated calf raise with thigh pads",
     descriptionSk:
       "Stroj na vytlacanie cez spicky v sede. Precvičuje hlavne lytka.",
-    imageAsset: "lytka-v-sede.jpg",
+    imageAsset: "3027_lytka-v-sede_1.webp",
+    imageAssets: [
+      "3027_lytka-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/kDGYwmHtuxE?si=M-yeYAfEdVI5hhgV",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -63,7 +75,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Forward leaning calf raise machine",
     descriptionSk:
       "Stroj na vytlacanie cez spicky v predklone. Precvičuje hlavne lytka.",
-    imageAsset: "lytka-v-predklone.jpg",
+    imageAsset: "4026_lytka-v-predklone_1.webp",
+    imageAssets: [
+      "4026_lytka-v-predklone_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/k8PRCiK9BLA?si=zPl3ZE9GzpW-f1pl",
     setupNoteLabel: "Foot stance"
   },
   {
@@ -76,21 +92,28 @@ export const mockMachines: Machine[] = [
     imageHint: "Forward leaning calf raise with support pad",
     descriptionSk:
       "Stroj na vytlacanie cez spicky s oporou tela v predklone. Precvičuje hlavne lytka.",
-    imageAsset: "lytka-v-predklone-na-opierke.jpg",
+    imageAsset: "4337_lytka-v-predklone-na-opierke_1.webp",
+    imageAssets: [
+      "4337_lytka-v-predklone-na-opierke_2.webp"
+    ],
     setupNoteLabel: "Foot stance"
   },
   {
     id: "seated-straight-arm-pulldown",
     brand: "Gym80",
-    modelName: "Seated Straight Arm Pulldown",
-    displayNameSk: "Sťahovanie vystretými rukami v sede",
+    modelName: "Back Extension",
+    displayNameSk: "Zakláňanie dozadu na chrbát",
     category: "Selectorized",
     muscleGroup: "Chrbat",
-    imageHint: "Seated pulldown style machine with straight-arm lever",
+    imageHint: "Back extension machine with seated support",
     descriptionSk:
-      "Stroj na pritahovanie ruk zhora nadol takmer vystretymi pazami. Precvičuje hlavne chrbat a sirku chrbta.",
-    imageAsset: "stahovanie biceps-vystretymi-rukami.jpg",
-    setupNoteLabel: "Seat height"
+      "Stroj na zaklananie dozadu a spevnenie chrbta. Precvicuje hlavne spodny chrbat, zadok a zadnu cast stehien.",
+    imageAsset: "3007_zaklananie do zadu na chrbat_1.webp",
+    imageAssets: [
+      "3007_zaklananie do zadu na chrbat_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/abyKvjJ2Yuc?si=ERbsOuNAX5Sl6Rjw",
+    setupNoteLabel: "Back pad position"
   },
   {
     id: "assisted-pull-up-dip",
@@ -102,7 +125,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Assisted pull-up and dip machine with kneeling platform",
     descriptionSk:
       "Stroj na zhyby a dipy s dopomocou. Precvičuje hlavne chrbat, hrudnik, ramena a tricepsy podla zvoleneho cviku.",
-    imageAsset: "zhyby-a-dipy-s-dopomocou.jpg",
+    imageAsset: "3017_zhyby-a-dipy-s-dopomocou_1.webp",
+    imageAssets: [
+      "3017_zhyby-a-dipy-s-dopomocou_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/L05qvFArXmE?si=4zUJslNv_2X3G2un",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -115,7 +142,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Bodyweight station for pull-ups and dips",
     descriptionSk:
       "Stanoviste na cvicenie s vlastnou vahou. Da sa pouzit na zhyby, dipy a dalsie cviky na chrbat, hrudnik, ramena a ruky.",
-    imageAsset: "bradla-na-dipy-a-zhyby.jpg",
+    imageAsset: "4021_bradla-na-dipy-a-zhyby_1.webp",
+    imageAssets: [
+      "4021_bradla-na-dipy-a-zhyby_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/_kx544pkYJU?si=YvONldPHwE5kUCtO",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -128,7 +159,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Bodyweight station for pull-ups, dips and abs",
     descriptionSk:
       "Stanoviste na cvicenie s vlastnou vahou. Da sa pouzit na zhyby, dipy, zdvihy noh na brucho a dalsie cviky na chrbat, hrudnik, ramena, ruky aj brucho.",
-    imageAsset: "stanoviste-na-zhyby-dipy-a-brucho.jpg",
+    imageAsset: "4031_stanoviste-na-zhyby-dipy-a-brucho_1.webp",
+    imageAssets: [
+      "4031_stanoviste-na-zhyby-dipy-a-brucho_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/Yozj1b0JC9w?si=dJqVHxbD4Eff1mP0",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -141,7 +176,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated abdominal machine with chest pad and leg support",
     descriptionSk:
       "Stroj na brucho v sede. Precvičuje hlavne priame brusne svaly.",
-    imageAsset: "brusny-stroj.jpg",
+    imageAsset: "3008_brusny-stroj_1.webp",
+    imageAssets: [
+      "3008_brusny-stroj_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/AxhVsJLNNBw?si=u_mtLD9orE9Gqt4p",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -198,7 +237,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated triceps press machine with elbow support and handles",
     descriptionSk:
       "Stroj na tlak rukami nadol v sede. Precvicuje hlavne tricepsy a zadnu cast pazi.",
-    imageAsset: "tricepsovy-tlak-v-sede.jpg",
+    imageAsset: "3014_tricepsovy tlak v sede_1.webp",
+    imageAssets: [
+      "3014_tricepsovy tlak v sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/aN0MIGt9R0w?si=-0FBFE0T-M8X7F99",
     setupNoteLabel: "Seat height"
   },
   {
@@ -211,7 +254,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated chest press with two handles",
     descriptionSk:
       "Stroj na odtlacanie v sede. Precvičuje hlavne hrudnik, prednu cast ramien a tricepsy.",
-    imageAsset: "odtlacanie-na-hrudnik-v-sede.jpg",
+    imageAsset: "3016_odtlacanie-na-hrudnik-v-sede_1.webp",
+    imageAssets: [
+      "3016_odtlacanie-na-hrudnik-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/wrDFqozJ_c0?si=wNCQK6ZekO887_bf",
     setupNoteLabel: "Seat height"
   },
   {
@@ -224,7 +271,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated chest fly machine",
     descriptionSk:
       "Stroj na rozpažovanie v sede. Precvičuje hlavne hrudnik a prednu cast ramien.",
-    imageAsset: "rozpazovanie-na-hrudnik-v-sede.jpg",
+    imageAsset: "3022_rozpazovanie-na-hrudnik-v-sede_1.webp",
+    imageAssets: [
+      "3022_rozpazovanie-na-hrudnik-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/KcaZ93f8yww?si=Umlm_9ho4tXHbnl-",
     setupNoteLabel: "Seat height"
   },
   {
@@ -238,6 +289,11 @@ export const mockMachines: Machine[] = [
     descriptionSk:
       "Stroj na tlacenie ruk nadol a dopredu v sede. Precvičuje hlavne spodnu cast hrudnika, tricepsy a prednu cast ramien.",
     imageAsset: "tlaky-na-hrudnik-nadol-v-sede.jpg",
+    imageAssets: [
+      "3036_tlaky-na-hrudnik-nadol-v-sede_1.webp",
+      "3036_tlaky-na-hrudnik-nadol-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/iBrnSfp3eVs?si=Ka8BJhVo3PT7gK3z",
     setupNoteLabel: "Seat height"
   },
   {
@@ -250,7 +306,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Incline chest press machine",
     descriptionSk:
       "Stroj na odtlacanie ruk v sikmom smere. Precvičuje hlavne vrchnu cast hrudnika, prednu cast ramien a tricepsy.",
-    imageAsset: "tlaky-na-hrudnik-sikmo.jpg",
+    imageAsset: "4341_tlaky-na-hrudnik-sikmo_1.webp",
+    imageAssets: [
+      "4341_tlaky-na-hrudnik-sikmo_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/OFMGNhhrIT0?si=9YcTaKcxoLor_FJV",
     setupNoteLabel: "Seat height"
   },
   {
@@ -263,7 +323,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Decline chest press machine",
     descriptionSk:
       "Stroj na odtlacanie ruk v sikmom smere nadol. Precvičuje hlavne spodnu cast hrudnika, prednu cast ramien a tricepsy.",
-    imageAsset: "tlaky-na-hrudnik-sikmo-nadol.jpg",
+    imageAsset: "4346_tlaky-na-hrudnik-sikmo-nadol_1.webp",
+    imageAssets: [
+      "4346_tlaky-na-hrudnik-sikmo-nadol_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/Qe8F1xp3oDU?si=trVViqgd6uLK_w1D",
     setupNoteLabel: "Seat height"
   },
   {
@@ -276,7 +340,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Upward chest press machine",
     descriptionSk:
       "Stroj na odtlacanie ruk smerom hore v sede. Precvičuje hlavne vrchnu cast hrudnika, prednu cast ramien a tricepsy.",
-    imageAsset: "tlaky-na-hrudnik-hore-v-sede.jpg",
+    imageAsset: "4335_tlaky-na-hrudnik-hore-v-sede_1.webp",
+    imageAssets: [
+      "4335_tlaky-na-hrudnik-hore-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/vp6G74LcsqM?si=8KS4Ap_PpQC45ww2",
     setupNoteLabel: "Seat height"
   },
   {
@@ -289,7 +357,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Lying chest press machine",
     descriptionSk:
       "Stroj na odtlacanie ruk v lahu na lavicke. Precvičuje hlavne hrudnik, prednu cast ramien a tricepsy.",
-    imageAsset: "tlaky-na-hrudnik-v-lahu.jpg",
+    imageAsset: "4331_tlaky-na-hrudnik-v-lahu_1.webp",
+    imageAssets: [
+      "4331_tlaky-na-hrudnik-v-lahu_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/hi4IuKMTGrQ?si=w0b1LHgRWl_Rkll1",
     setupNoteLabel: "Bench position"
   },
   {
@@ -302,7 +374,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated leg press with foot plate",
     descriptionSk:
       "Stroj na odtlacanie nohami v sede. Precvičuje hlavne predne stehna, zadok a dalsie svaly noh.",
-    imageAsset: "tlak-nohami-v-sede.jpg",
+    imageAsset: "3030_tlak-nohami-v-sede_1.webp",
+    imageAssets: [
+      "3030_tlak-nohami-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/b4s_pQTwfz0?si=1grUMmMHXgUR4uc7",
     setupNoteLabel: "Back pad position"
   },
   {
@@ -315,7 +391,8 @@ export const mockMachines: Machine[] = [
     imageHint: "Incline leg press machine",
     descriptionSk:
       "Stroj na odtlacanie nohami v sikmej polohe. Precvičuje hlavne predne stehna, zadok a dalsie svaly noh.",
-    imageAsset: "tlak-nohami-sikmo.jpg",
+    imageAsset: "4159_tlak-nohami-sikmo_2.jpg",
+    videoUrl: "https://youtu.be/dE_nadcuD3o?si=WQpxTQFgNUi3Bfb8",
     setupNoteLabel: "Back pad position"
   },
   {
@@ -328,7 +405,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Lying leg press machine",
     descriptionSk:
       "Stroj na odtlacanie nohami v lahu. Precvičuje hlavne predne stehna, zadok a dalsie svaly noh.",
-    imageAsset: "tlak-nohami-v-lahu.jpg",
+    imageAsset: "4324_tlak-nohami-v-lahu_1.webp",
+    imageAssets: [
+      "4324_tlak-nohami-v-lahu_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/4PFbqPtTzLo?si=txUCwz6LHNlX1a-y",
     setupNoteLabel: "Back pad position"
   },
   {
@@ -367,7 +448,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated shoulder press with back support",
     descriptionSk:
       "Stroj na vytlacanie ruk v sede s oporou chrbta. Precvičuje hlavne ramena a tricepsy.",
-    imageAsset: "tlaky-na-ramena-v-sede-s-opierkou.jpg",
+    imageAsset: "4322_tlaky-na-ramena-v-sede-s-opierkou_1.webp",
+    imageAssets: [
+      "4322_tlaky-na-ramena-v-sede-s-opierkou_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/wlRiUzLYobw?si=AUZ40tKBWTq0Xu_X",
     setupNoteLabel: "Seat height"
   },
   {
@@ -380,7 +465,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Upward shoulder press machine",
     descriptionSk:
       "Stroj na vytlacanie ruk nahor v sikmom smere. Precvičuje hlavne ramena a tricepsy.",
-    imageAsset: "tlaky-na-ramena-nahor-sikmo.jpg",
+    imageAsset: "4320_tlaky-na-ramena-nahor-sikmo_1.webp",
+    imageAssets: [
+      "4320_tlaky-na-ramena-nahor-sikmo_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/Jm-bQ9AhRlA?si=od2xZvPevk_XDFLc",
     setupNoteLabel: "Seat height"
   },
   {
@@ -393,7 +482,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Back extension machine",
     descriptionSk:
       "Stroj na zaklony a spevnenie stredu tela. Precvičuje hlavne spodny chrbat, zadok a zadnu cast stehien.",
-    imageAsset: "zaklony-na-spodny-chrbat.jpg",
+    imageAsset: "4038_zaklony-na-spodny-chrbat_1.webp",
+    imageAssets: [
+      "4038_zaklony-na-spodny-chrbat_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/OmgWCEL-Jpg?si=KuAHGIZbTE4F6-g6",
     setupNoteLabel: "Back pad position"
   },
   {
@@ -458,7 +551,8 @@ export const mockMachines: Machine[] = [
     imageHint: "Dual cable station with adjustable pulleys",
     descriptionSk:
       "Univerzalny stroj s dvoma kladkami. Da sa pouzit na chrbat, hrudnik, ramena, ruky aj brucho podla zvoleneho cviku.",
-    imageAsset: "kladkova-veza.jpg",
+    imageAsset: "4012_kladkova-veza_1.webp",
+    videoUrl: "https://youtu.be/nKhFU68Fcjc?si=a5vXHRuHC0HJbuTd",
     setupNoteLabel: "Seat height"
   },
   {
@@ -472,6 +566,10 @@ export const mockMachines: Machine[] = [
     descriptionSk:
       "Stroj na pritahovanie madiel k telu v sede. Precvicuje hlavne stred chrbta, siroky chrbtovy sval a zadnu cast ramien.",
     imageAsset: "pritah-na-chrbat-v-sede-kladka.jpg",
+    imageAssets: [
+      "4016_pritah-na-chrbat-v-sede-kladka_1.webp"
+    ],
+    videoUrl: "https://youtu.be/MxIGOHJ8gHQ?si=zXAfK1CLI3c-TGP5",
     setupNoteLabel: "Seat height"
   },
   {
@@ -484,7 +582,8 @@ export const mockMachines: Machine[] = [
     imageHint: "Lat pulldown with thigh pads and wide bar",
     descriptionSk:
       "Stroj na stahovanie tyce zhora k hrudniku v sede. Precvicuje hlavne siroky chrbtovy sval, stred chrbta a bicepsy.",
-    imageAsset: "stahovanie-hornej-kladky.jpg",
+    imageAsset: "4116_stahovanie-hornej-kladky_1.webp",
+    videoUrl: "https://youtu.be/MmbKY6FLkLM?si=MslrmbYSoWsxpgjP",
     setupNoteLabel: "Seat height"
   },
   {
@@ -497,7 +596,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Incline row machine",
     descriptionSk:
       "Stroj na pritahovanie v predklone s oporou. Precvičuje hlavne chrbat, zadnu cast ramien a bicepsy.",
-    imageAsset: "pritah-na-chrbat-v-predklone.jpg",
+    imageAsset: "4018_T_bar_chrbat_1.webp",
+    imageAssets: [
+      "4018_T_bar_chrbat_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/ElBu6Pk0Z60?si=b_nwEe6LldRI1t4V",
     setupNoteLabel: "Chest pad height"
   },
   {
@@ -510,7 +613,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated row machine",
     descriptionSk:
       "Stroj na pritahovanie ruk k telu v sede. Precvičuje hlavne chrbat, zadnu cast ramien a bicepsy.",
-    imageAsset: "pritah-na-chrbat-v-sede.jpg",
+    imageAsset: "4319_pritah-na-chrbat-v-sede_1.webp",
+    imageAssets: [
+      "4319_pritah-na-chrbat-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/ggCfI3GVRY0?si=3P1_YZtAd4l5wtUX",
     setupNoteLabel: "Seat height"
   },
   {
@@ -523,7 +630,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Supported row machine with chest pad",
     descriptionSk:
       "Stroj na pritahovanie ruk k telu s oporou hrudnika. Precvičuje hlavne chrbat, zadnu cast ramien a bicepsy.",
-    imageAsset: "pritah-na-chrbat-na-opierke.jpg",
+    imageAsset: "4344_pritah-na-chrbat-na-opierke_1.webp",
+    imageAssets: [
+      "4344_pritah-na-chrbat-na-opierke_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/XkN8Ly14j-M?si=gXhcH-wGiojhAs5y",
     setupNoteLabel: "Chest pad height"
   },
   {
@@ -536,7 +647,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Plate loaded pulldown machine",
     descriptionSk:
       "Stroj na stahovanie ruk zhora nadol v sede. Precvičuje hlavne chrbat, zadnu cast ramien a bicepsy.",
-    imageAsset: "stahovanie-kladiek-na-chrbat-v-sede.jpg",
+    imageAsset: "4311_stahovanie-kladiek-na-chrbat-v-sede_1.webp",
+    imageAssets: [
+      "4311_stahovanie-kladiek-na-chrbat-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/r8jqKqruwGU?si=GkV-lzJmsPKslF08",
     setupNoteLabel: "Seat height"
   },
   {
@@ -549,7 +664,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Bar pulldown machine",
     descriptionSk:
       "Stroj na stahovanie tyce zhora nadol v sede. Precvičuje hlavne chrbat, zadnu cast ramien a bicepsy.",
-    imageAsset: "stahovanie-tyce-na-chrbat-v-sede.jpg",
+    imageAsset: "4382_stahovanie-tyce-na-chrbat-v-sede_1.webp",
+    imageAssets: [
+      "4382_stahovanie-tyce-na-chrbat-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/-F7Wnt6HYH8?si=0Chpg9rMRcRVj7tR",
     setupNoteLabel: "Seat height"
   },
   {
@@ -562,7 +681,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated leg curl machine",
     descriptionSk:
       "Stroj na zakopavanie noh v sede. Precvicuje hlavne zadnu cast stehien.",
-    imageAsset: "zakopavanie-v-lahu.jpg",
+    imageAsset: "4336_zakopavanie-v-sede-1.webp",
+    imageAssets: [
+      "4336_zakopavanie-v-sede-2.jpg"
+    ],
+    videoUrl: "https://youtu.be/DWt8moqtQIU?si=BoUebHIO4xWdpqVT",
     setupNoteLabel: "Back pad position"
   },
   {
@@ -575,7 +698,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Ab bench",
     descriptionSk:
       "Lavicka na cviky na brucho a stred tela. Precvičuje hlavne priame brusne svaly.",
-    imageAsset: "lavicka-na-brucho.jpg",
+    imageAsset: "4307_lavicka-na-brucho_1.webp",
+    imageAssets: [
+      "4307_lavicka-na-brucho_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/ZBOYvOwe-2o?si=h3YcG-vzYfvZLobS",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -602,6 +729,11 @@ export const mockMachines: Machine[] = [
     descriptionSk:
       "Stroj na odtlacanie ruk dopredu v sede s oporou chrbta. Precvičuje hlavne hrudnik, prednu cast ramien a tricepsy.",
     imageAsset: "tlaky-na-hrudnik-s-opierkou.jpg",
+    imageAssets: [
+      "3012_tlaky-na-hrudnik-s-opierkou_1.webp",
+      "3012_tlaky-na-hrudnik-s-opierkou_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/deSi2MC-UOY?si=FTGguecw1k6CrLe9",
     setupNoteLabel: "Seat height"
   },
   {
@@ -614,7 +746,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated calf raise with support",
     descriptionSk:
       "Stroj na vytlacanie cez spicky v sede s oporou stehien. Precvičuje hlavne lytka.",
-    imageAsset: "vypony-na-lytka-v-sede-s-oporou.jpg",
+    imageAsset: "4352_vypony-na-brucho-v-sede-s-oporou_1.webp",
+    imageAssets: [
+      "4352_vypony-na-brucho-v-sede-s-oporou_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/TO5juRMJJkU?si=_jlDF_T4VgISGgFG",
     setupNoteLabel: "Foot stance"
   },
   {
@@ -627,7 +763,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Supported squat machine",
     descriptionSk:
       "Stroj na drepovy pohyb s oporou tela. Precvičuje hlavne predne stehna, zadok a dalsie svaly noh.",
-    imageAsset: "drepovaci-stroj-s-opierkou.jpg",
+    imageAsset: "4353_drepovaci-stroj-s-opierkou_1.webp",
+    imageAssets: [
+      "4353_drepovaci-stroj-s-opierkou_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/Oi2dbVxPSiE?si=7Q7RxSMbfzHyr3cp",
     setupNoteLabel: "Foot stance"
   },
   {
@@ -653,7 +793,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Overhead seated shoulder press",
     descriptionSk:
       "Stroj na vytlacanie ruk hore v sede. Precvičuje hlavne ramena a tricepsy.",
-    imageAsset: "tlaky-na-ramena-hore-v-sede.jpg",
+    imageAsset: "4371_tlaky-na-ramena-hore-v-sede_1.webp",
+    imageAssets: [
+      "4371_tlaky-na-ramena-hore-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/zfpXmGpL8mA?si=NV7OGNlhxqHyrFqS",
     setupNoteLabel: "Seat height"
   },
   {
@@ -666,7 +810,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated hip abduction machine",
     descriptionSk:
       "Stroj na tlacenie noh do stran v sede. Precvičuje hlavne vonkajsiu cast stehien a zadok.",
-    imageAsset: "roznozovanie-v-sede.jpg",
+    imageAsset: "3028_roznozovanie-v-sede_1.webp",
+    imageAssets: [
+      "3028_roznozovanie-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/SC2SSQCzvBg?si=WKBBTU3ejJghBEAe",
     setupNoteLabel: "Seat depth"
   },
   {
@@ -692,8 +840,31 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated biceps curl machine",
     descriptionSk:
       "Stroj na bicepsovy zdvih v sede. Precvičuje hlavne bicepsy a prednu cast ruk.",
-    imageAsset: "bicepsovy-zdvih-v-sede.jpg",
+    imageAsset: "4366_bicepsovy-zdvih-v-sede_1.webp",
+    imageAssets: [
+      "4366_bicepsovy-zdvih-v-sede_2.jpg",
+      "4350_bicepsovy-zdvih-v-sede_1.webp",
+      "4350_bicepsovy-zdvih-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/V7TLkwJmiEU?si=xoLaPO4YFGPvyh_M",
     setupNoteLabel: "Seat height"
+  },
+  {
+    id: "basic-press-bench",
+    brand: "Gym80",
+    modelName: "Basic Press Bench",
+    displayNameSk: "Lavicka na tlaky",
+    category: "Bench",
+    muscleGroup: "Hrudnik",
+    imageHint: "Flat press bench with barbell rack",
+    descriptionSk:
+      "Lavicka na tlaky s velkou cinkou. Da sa pouzit hlavne na tlaky na hrudnik a podla uchopu aj na triceps a prednu cast ramien.",
+    imageAsset: "4097_basic_press_bench_1.webp",
+    imageAssets: [
+      "4097_basic_press_bench_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/rTW67E2R_Pw?si=KnvJzBIzi1imNGuP",
+    setupNoteLabel: "Bench position"
   },
   {
     id: "treadmill",
