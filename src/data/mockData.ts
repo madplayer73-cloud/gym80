@@ -579,7 +579,7 @@ export const mockMachines: Machine[] = [
     imageAssets: [
       "4320_tlaky-na-ramena-nahor-sikmo_2.jpg"
     ],
-    videoUrl: "https://youtu.be/Jm-bQ9AhRlA?si=od2xZvPevk_XDFLc",
+    videoUrl: "https://youtu.be/Jm-bQ9AhRlA?si=E5OESLjmoAr1rAIU",
     setupNoteLabel: "Seat height"
   },
   {
@@ -609,7 +609,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Hyperextension bench",
     descriptionSk:
       "Lavicka na zaklony a spevnenie stredu tela. Precvičuje hlavne spodny chrbat, zadok a zadnu cast stehien.",
-    imageAsset: "hyperextenzna-lavicka.jpg",
+    imageAsset: "4119_Hyperextenzna lavicka_1.webp",
+    imageAssets: [
+      "4119_Hyperextenzna lavicka_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/t-vR6Yb0ttg?si=5CXwynDgBWinslJa",
     setupNoteLabel: "Back pad position"
   },
   {
@@ -622,7 +626,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Smith machine",
     descriptionSk:
       "Vedena velka cinka na viacero cvikov. Da sa pouzit na drepy, tlaky, vypady aj dalsie zakladne cviky.",
-    imageAsset: "smithov-stroj.jpg",
+    imageAsset: "4002_Smithov_stroj_1.webp",
+    imageAssets: [
+      "4002_Smithov_stroj_2.webp"
+    ],
+    videoUrl: "https://youtu.be/OxyRZl29hQ0?si=l5sg3qk8bNyZ8fX9",
     setupNoteLabel: "Seat height"
   },
   {
@@ -635,7 +643,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Squat rack",
     descriptionSk:
       "Stojan na cviky s velkou cinkou. Da sa pouzit na drepy, tlaky, vypady a dalsie zakladne cviky.",
-    imageAsset: "drepovaci-stojan.jpg",
+    imageAsset: "4094_drepovaci-stojan_1.jpg",
+    imageAssets: [
+      "4094_drepovaci-stojan_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/nZywqu-Sc6w?si=v2GJ0IrmBmQM0wb_",
     setupNoteLabel: "Seat height"
   },
   {
@@ -648,7 +660,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Cable crossover station",
     descriptionSk:
       "Stroj s nastavitelnymi kladkami na vela cvikov. Da sa pouzit na chrbat, hrudnik, ramena, ruky aj nohy podla zvoleneho cviku.",
-    imageAsset: "kladky-na-cele-telo.jpg",
+    imageAsset: "4134_kladky-na-cele-telo_1.webp",
+    imageAssets: [
+      "4134_kladky-na-cele-telo_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/tMUOrcSH4Jw?si=r7hTi-ERHT0YNJPV",
     setupNoteLabel: "Seat height"
   },
   {
@@ -662,6 +678,9 @@ export const mockMachines: Machine[] = [
     descriptionSk:
       "Univerzalny stroj s dvoma kladkami. Da sa pouzit na chrbat, hrudnik, ramena, ruky aj brucho podla zvoleneho cviku.",
     imageAsset: "4012_kladkova-veza_1.webp",
+    imageAssets: [
+      "4012_kladkova-veza_2.jpg"
+    ],
     videoUrl: "https://youtu.be/nKhFU68Fcjc?si=a5vXHRuHC0HJbuTd",
     setupNoteLabel: "Seat height"
   },
@@ -825,7 +844,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Hip thrust machine with back support",
     descriptionSk:
       "Stroj na vytlacanie panvy hore s oporou chrbta. Precvičuje hlavne zadok a zadnu cast stehien.",
-    imageAsset: "hip-thrust-stroj.jpg",
+    imageAsset: "4381_hip-thrust-stroj_1.webp",
+    imageAssets: [
+      "4381_hip-thrust-stroj_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/3CRlBqtSwpY?si=t1wDqy8sV4hyAV9P",
     setupNoteLabel: "Bench position"
   },
   {
@@ -890,7 +913,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Leg press with dual platforms",
     descriptionSk:
       "Stroj na odtlacanie nohami s dvoma plosinami. Precvičuje hlavne predne stehna, zadok a dalsie svaly noh.",
-    imageAsset: "leg-press-s-dvoma-plochami.jpg",
+    imageAsset: "4353_leg-press-s-dvoma-plochami_1.webp",
+    imageAssets: [
+      "4353_leg-press-s-dvoma-plochami_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/Oi2dbVxPSiE?si=QJzFMEFg0ezozoDy",
     setupNoteLabel: "Foot stance"
   },
   {
@@ -954,7 +981,11 @@ export const mockMachines: Machine[] = [
     imageHint: "45 degree leg press",
     descriptionSk:
       "Stroj na odtlacanie nohami v sikmej 45 stupnovej polohe. Precvičuje hlavne predne stehna, zadok a dalsie svaly noh.",
-    imageAsset: "tlak-nohami-45-stupnov.jpg",
+    imageAsset: "4324_tlak-nohami-v-lahu_1.webp",
+    imageAssets: [
+      "4324_tlak-nohami-v-lahu_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/4PFbqPtTzLo?si=3iL3NL2XRSCopARr",
     setupNoteLabel: "Back pad position"
   },
   {
