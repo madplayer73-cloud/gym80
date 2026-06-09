@@ -16,6 +16,7 @@ import { Tag } from "../components/Tag";
 import { AppColors, useTheme } from "../theme";
 import {
   Machine,
+  MachineExerciseVariant,
   ReadinessPain,
   TechniqueQuality,
   TrainingSetLog,
@@ -51,6 +52,8 @@ type MachineDetailScreenProps = {
   onBackToPlan?: () => void;
   onSaveEntry: (input: {
     machineId: string;
+    exerciseVariantId?: string;
+    exerciseVariantNameSk?: string;
     weightKg?: number;
     sets?: number;
     reps?: number;
@@ -258,6 +261,57 @@ function playRestDoneSound() {
   }
 }
 
+function playCountdownBeep(remainingSec: number) {
+  try {
+    const AudioContextCtor =
+      (globalThis as unknown as { AudioContext?: typeof AudioContext }).AudioContext ??
+      (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    const audioContext = new AudioContextCtor();
+    void audioContext.resume?.();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const frequency = remainingSec === 3 ? 640 : remainingSec === 2 ? 820 : 1060;
+    const duration = remainingSec === 1 ? 0.22 : 0.14;
+
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.36, audioContext.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch {
+    // Zvuk je bonus. Niektore prehliadace ho povolia az po interakcii.
+  }
+}
+
+function getDefaultVariantId(machine: Machine) {
+  return machine.exerciseVariants?.[0]?.id ?? null;
+}
+
+function getVariantLoadHint(variant: MachineExerciseVariant | undefined) {
+  if (!variant) {
+    return "";
+  }
+
+  if (variant.loadType === "assisted") {
+    return "Pri tomto variante kg znamena dopomoc stroja. Menej kg = tazsi cvik.";
+  }
+
+  if (variant.loadType === "bodyweight") {
+    return "Tento variant je vlastna vaha. Ak pouzijes vestu alebo kotuc, zatial to napis do poznamky.";
+  }
+
+  return "Tento variant ma vlastnu vahu alebo odpor, preto ho ukladame oddelene.";
+}
+
 export function MachineDetailScreen({
   machine,
   entries,
@@ -271,7 +325,35 @@ export function MachineDetailScreen({
   const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const isCardio = machine.muscleGroup === "Kardio";
-  const latestEntry = entries[0];
+  const [selectedVariantId, setSelectedVariantId] = React.useState<string | null>(() =>
+    getDefaultVariantId(machine)
+  );
+
+  React.useEffect(() => {
+    setSelectedVariantId(getDefaultVariantId(machine));
+  }, [machine.id]);
+
+  const selectedVariant = React.useMemo(
+    () =>
+      machine.exerciseVariants?.find((variant) => variant.id === selectedVariantId) ??
+      machine.exerciseVariants?.[0],
+    [machine.exerciseVariants, selectedVariantId]
+  );
+  const entriesForSelectedVariant = React.useMemo(() => {
+    if (!selectedVariant) {
+      return entries;
+    }
+
+    const defaultVariantId = getDefaultVariantId(machine);
+    return entries.filter(
+      (entry) =>
+        entry.exerciseVariantId === selectedVariant.id ||
+        (!entry.exerciseVariantId && selectedVariant.id === defaultVariantId)
+    );
+  }, [entries, machine, selectedVariant]);
+  const latestEntry = entriesForSelectedVariant[0];
+  const isBodyweightVariant = selectedVariant?.loadType === "bodyweight";
+  const tracksWeight = !isCardio && !isBodyweightVariant;
   const machineImages = React.useMemo(
     () =>
       [machine.imageAsset, ...(machine.imageAssets ?? [])]
@@ -280,8 +362,12 @@ export function MachineDetailScreen({
     [machine]
   );
   const machineImage = machineImages[0] ?? null;
-  const weightEntries = entries.filter((entry) => typeof entry.weightKg === "number");
-  const cardioEntries = entries.filter((entry) => typeof entry.durationMin === "number");
+  const weightEntries = tracksWeight
+    ? entriesForSelectedVariant.filter((entry) => typeof entry.weightKg === "number")
+    : [];
+  const cardioEntries = entriesForSelectedVariant.filter(
+    (entry) => typeof entry.durationMin === "number"
+  );
   const maxWeight = weightEntries.length
     ? Math.max(...weightEntries.map((entry) => entry.weightKg ?? 0))
     : 0;
@@ -349,6 +435,7 @@ export function MachineDetailScreen({
     remainingSec: number;
   } | null>(null);
   const [note, setNote] = React.useState("");
+  const lastCountdownBeepRef = React.useRef<number | null>(null);
   const selectedMachineImage = machineImages[selectedImageIndex] ?? machineImage;
   const latestProgressionAdvice = !isCardio
     ? getTrendProgressionAdvice(entries, machine) ?? getEntryProgressionAdvice(latestEntry)
@@ -366,14 +453,14 @@ export function MachineDetailScreen({
   React.useEffect(() => {
     setIsWarmupConfirmed(false);
     setIsWarmupDismissed(false);
-  }, [machine.id, latestEntry?.id]);
+  }, [machine.id, latestEntry?.id, selectedVariant?.id]);
 
   React.useEffect(() => {
     const suggestedWorkingWeight = getSuggestedWorkingWeight(latestEntry, trainingGuidance);
     const workingSets = clampSetCount(latestEntry?.sets ?? 4);
     const workingReps = latestEntry?.reps ?? trainingGuidance.defaultRepMax ?? 10;
 
-    setWeightKg(suggestedWorkingWeight ? String(suggestedWorkingWeight) : "");
+    setWeightKg(tracksWeight && suggestedWorkingWeight ? String(suggestedWorkingWeight) : "");
     setSets(latestEntry?.sets ? String(latestEntry.sets) : "4");
     setReps(latestEntry?.reps ? String(latestEntry.reps) : String(trainingGuidance.defaultRepMax ?? 10));
     setDurationMin(latestEntry?.durationMin ? String(latestEntry.durationMin) : "20");
@@ -401,7 +488,7 @@ export function MachineDetailScreen({
           id: `set-working-${index + 1}-${Date.now()}`,
           setNumber: warmupLogs.length + index + 1,
           setType: "working" as const,
-          weightKg: suggestedWorkingWeight ?? setLog.weightKg,
+          weightKg: tracksWeight ? suggestedWorkingWeight ?? setLog.weightKg : undefined,
           reps: setLog.reps ?? workingReps,
           techniqueQuality: setLog.techniqueQuality ?? latestEntry.techniqueQuality ?? "cista",
           completed: false
@@ -412,7 +499,7 @@ export function MachineDetailScreen({
       (_item, index) =>
         createSetLog({
           index: warmupLogs.length + existingWorkingLogs.length + index,
-          weightKg: suggestedWorkingWeight,
+          weightKg: tracksWeight ? suggestedWorkingWeight : undefined,
           reps: workingReps,
           rpe: latestEntry?.rpe ?? 8,
           painLocation: latestEntry?.painLocation ?? "nie",
@@ -428,10 +515,11 @@ export function MachineDetailScreen({
     ));
     setCollapsedSetIds({});
     setActiveRestTimer(null);
-  }, [latestEntry?.id, machine.id, restTimerSeconds, trainingGuidance]);
+  }, [latestEntry?.id, machine.id, restTimerSeconds, selectedVariant?.id, tracksWeight, trainingGuidance]);
 
   React.useEffect(() => {
     if (!activeRestTimer) {
+      lastCountdownBeepRef.current = null;
       return;
     }
 
@@ -440,6 +528,14 @@ export function MachineDetailScreen({
       playRestDoneSound();
       triggerRestCompleteHaptic();
       return;
+    }
+
+    if (
+      activeRestTimer.remainingSec <= 3 &&
+      lastCountdownBeepRef.current !== activeRestTimer.remainingSec
+    ) {
+      lastCountdownBeepRef.current = activeRestTimer.remainingSec;
+      playCountdownBeep(activeRestTimer.remainingSec);
     }
 
     const interval = setInterval(() => {
@@ -452,6 +548,10 @@ export function MachineDetailScreen({
   }, [activeRestTimer]);
 
   const adjustWeight = (delta: number) => {
+    if (!tracksWeight) {
+      return;
+    }
+
     triggerTapHaptic();
     const current = Number(weightKg || "0");
     const next = Math.max(0, Math.round((current + delta) * 100) / 100);
@@ -489,6 +589,10 @@ export function MachineDetailScreen({
   };
 
   const addSuggestedWarmupSets = () => {
+    if (!tracksWeight) {
+      return;
+    }
+
     const workingWeight = Number(weightKg) || getSuggestedWorkingWeight(latestEntry, trainingGuidance);
     const warmupLogs = trainingGuidance.warmupSets.map((warmupSet, index) =>
       createSetLog({
@@ -557,7 +661,7 @@ export function MachineDetailScreen({
         ...Array.from({ length: parsedSets - workingLogs.length }, (_item, index) =>
           createSetLog({
             index: warmupLogs.length + workingLogs.length + index,
-            weightKg: Number(weightKg) || undefined,
+            weightKg: tracksWeight ? Number(weightKg) || undefined : undefined,
             reps: Number(reps) || undefined,
             rpe,
             painLocation,
@@ -574,6 +678,9 @@ export function MachineDetailScreen({
   const startRestAfterSet = (setNumber: number) => {
     triggerTapHaptic();
     const now = new Date().toISOString();
+    const hasNextUncompletedSet = setLogs.some(
+      (setLog) => setLog.setNumber > setNumber && !setLog.completed
+    );
 
     updateSetLog(setNumber, {
       completed: true,
@@ -585,10 +692,14 @@ export function MachineDetailScreen({
     if (completedSet) {
       setCollapsedSetIds((current) => ({ ...current, [completedSet.id]: true }));
     }
-    setActiveRestTimer({
-      setNumber,
-      remainingSec: Number(restSeconds) || restTimerSeconds
-    });
+    setActiveRestTimer(
+      hasNextUncompletedSet
+        ? {
+            setNumber,
+            remainingSec: Number(restSeconds) || restTimerSeconds
+          }
+        : null
+    );
   };
 
   const handleSave = () => {
@@ -623,7 +734,7 @@ export function MachineDetailScreen({
         setNumber: index + 1,
         completed: true,
         completedAt: setLog.completedAt ?? new Date().toISOString(),
-        weightKg: setLog.weightKg ?? parsedWeight,
+        weightKg: tracksWeight ? setLog.weightKg ?? parsedWeight : undefined,
         reps: setLog.reps ?? Number(reps),
         rpe,
         painLocation: painLevel > 0 ? painLocation : "nie",
@@ -636,28 +747,33 @@ export function MachineDetailScreen({
     const performanceLogs = workingLogsForSave.length > 0 ? workingLogsForSave : logsForSave;
     const parsedSets = performanceLogs.length;
     const parsedReps = Math.round(
-      performanceLogs.reduce((sum, setLog) => sum + (setLog.reps ?? 0), 0) / parsedSets
+      performanceLogs.reduce((sum, setLog) => sum + (setLog.reps ?? 0), 0) /
+        Math.max(1, parsedSets)
     );
-    const averageWeight =
+    const averageWeight = tracksWeight
+      ?
       Math.round(
         (performanceLogs.reduce((sum, setLog) => sum + (setLog.weightKg ?? 0), 0) /
-          parsedSets) *
+          Math.max(1, parsedSets)) *
           100
-      ) / 100;
+      ) / 100
+      : undefined;
     const averageRpe =
       Math.round(
         (performanceLogs.reduce((sum, setLog) => sum + (setLog.rpe ?? rpe), 0) /
-          parsedSets) *
+          Math.max(1, parsedSets)) *
           10
       ) / 10;
     const maxPainLevel = Math.max(...logsForSave.map((setLog) => setLog.painLevel ?? 0), painLevel);
 
-    if (!averageWeight || !parsedSets || !parsedReps) {
+    if ((tracksWeight && !averageWeight) || !parsedSets || !parsedReps) {
       return;
     }
 
     onSaveEntry({
       machineId: machine.id,
+      exerciseVariantId: selectedVariant?.id,
+      exerciseVariantNameSk: selectedVariant?.nameSk,
       weightKg: averageWeight,
       sets: parsedSets,
       reps: parsedReps,
@@ -675,6 +791,7 @@ export function MachineDetailScreen({
   };
 
   return (
+    <View style={styles.screenRoot}>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.topActions}>
         <Pressable
@@ -767,9 +884,45 @@ export function MachineDetailScreen({
         ) : null}
 
         <View style={styles.row}>
-          <Tag label={machine.muscleGroup} />
+          <Tag label={selectedVariant?.muscleGroup ?? machine.muscleGroup} />
         </View>
         <Text style={styles.description}>{machine.descriptionSk}</Text>
+        {machine.exerciseVariants?.length ? (
+          <View style={styles.variantBox}>
+            <Text style={styles.variantTitle}>Vyber cvik na tomto stroji</Text>
+            <View style={styles.variantGrid}>
+              {machine.exerciseVariants.map((variant) => {
+                const isActive = selectedVariant?.id === variant.id;
+
+                return (
+                  <Pressable
+                    key={variant.id}
+                    onPress={() => {
+                      triggerTapHaptic();
+                      setSelectedVariantId(variant.id);
+                    }}
+                    style={[styles.variantButton, isActive ? styles.variantButtonActive : null]}
+                  >
+                    <Text
+                      style={[
+                        styles.variantButtonText,
+                        isActive ? styles.variantButtonTextActive : null
+                      ]}
+                    >
+                      {variant.nameSk}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {selectedVariant ? (
+              <>
+                <Text style={styles.variantDescription}>{selectedVariant.descriptionSk}</Text>
+                <Text style={styles.variantHint}>{getVariantLoadHint(selectedVariant)}</Text>
+              </>
+            ) : null}
+          </View>
+        ) : null}
         {isTemporarilyBlocked ? (
           <View style={styles.blockedCard}>
             <Text style={styles.blockedTitle}>Trener tento cvik teraz neodporuca</Text>
@@ -856,7 +1009,7 @@ export function MachineDetailScreen({
                     value={`${latestEntry.inclinePercent ?? 0} %`}
                   />
                 </>
-              ) : (
+              ) : tracksWeight ? (
                 <>
                   <StatChip label="Vaha" value={`${latestEntry.weightKg ?? 0} kg`} />
                   <StatChip
@@ -864,8 +1017,19 @@ export function MachineDetailScreen({
                     value={`${latestEntry.sets ?? 0} x ${latestEntry.reps ?? 0}`}
                   />
                 </>
+              ) : (
+                <>
+                  <StatChip label="Typ" value="vlastna vaha" />
+                  <StatChip
+                    label="Serie x op."
+                    value={`${latestEntry.sets ?? 0} x ${latestEntry.reps ?? 0}`}
+                  />
+                </>
               )}
             </View>
+            {latestEntry.exerciseVariantNameSk ? (
+              <Text style={styles.note}>Variant: {latestEntry.exerciseVariantNameSk}</Text>
+            ) : null}
             <Text style={styles.dateLabel}>
               Naposledy: {new Date(latestEntry.completedAt).toLocaleString("sk-SK")}
             </Text>
@@ -916,7 +1080,9 @@ export function MachineDetailScreen({
         subtitle={
           isCardio
             ? "Zakladny prehlad pre kardio zaznamy."
-            : "Zakladny prehlad vahy a poctu treningov na tomto stroji."
+            : tracksWeight
+              ? "Zakladny prehlad vahy a poctu treningov na tomto stroji."
+              : "Zakladny prehlad poctu treningov a opakovani s vlastnou vahou."
         }
       >
         <View style={styles.statsRow}>
@@ -927,7 +1093,7 @@ export function MachineDetailScreen({
               <StatChip label="Treningy" value={String(entries.length)} />
               <StatChip label="Najdlhsi cas" value={`${maxCardioDuration} min`} />
             </>
-          ) : (
+          ) : tracksWeight ? (
             <>
               <StatChip label="Posledna vaha" value={`${latestEntry?.weightKg ?? 0} kg`} />
               <StatChip label="Najvyssia vaha" value={`${maxWeight} kg`} />
@@ -937,10 +1103,17 @@ export function MachineDetailScreen({
                 value={`${monthProgress >= 0 ? "+" : ""}${monthProgress} kg`}
               />
             </>
+          ) : (
+            <>
+              <StatChip label="Zataz" value="vlastna vaha" />
+              <StatChip label="Treningy" value={String(entriesForSelectedVariant.length)} />
+              <StatChip label="Posledne serie" value={String(latestEntry?.sets ?? 0)} />
+              <StatChip label="Posledne op." value={String(latestEntry?.reps ?? 0)} />
+            </>
           )}
         </View>
 
-        {!isCardio && recentWeightBars.length > 0 ? (
+        {tracksWeight && recentWeightBars.length > 0 ? (
           <View style={styles.progressChart}>
             {recentWeightBars.map((entry) => {
               const height = maxRecentWeight
@@ -998,7 +1171,7 @@ export function MachineDetailScreen({
           </View>
         ) : (
           <>
-            {plannedProgressionAdvice ? (
+            {tracksWeight && plannedProgressionAdvice ? (
               <View
                 style={[
                   styles.adviceCard,
@@ -1017,7 +1190,7 @@ export function MachineDetailScreen({
             ) : null}
           </View>
         ) : null}
-            {trainingGuidance.warmupSets.length && !isWarmupConfirmed && !isWarmupDismissed ? (
+            {tracksWeight && trainingGuidance.warmupSets.length && !isWarmupConfirmed && !isWarmupDismissed ? (
               <View style={styles.warmupSuggestionCard}>
                 <Text style={styles.warmupSuggestionTitle}>AI navrhuje rozcvicku</Text>
                 <Text style={styles.warmupSuggestionText}>
@@ -1058,7 +1231,7 @@ export function MachineDetailScreen({
                 </View>
               </View>
             ) : null}
-            {trainingGuidance.warmupSets.length && isWarmupConfirmed ? (
+            {tracksWeight && trainingGuidance.warmupSets.length && isWarmupConfirmed ? (
               <View style={styles.warmupConfirmedCard}>
                 <Text style={styles.warmupConfirmedText}>
                   Rozcvicka pridana hore pred pracovne serie. Kg aj opakovania vies stale rucne
@@ -1066,29 +1239,41 @@ export function MachineDetailScreen({
                 </Text>
               </View>
             ) : null}
-            <Text style={styles.fieldLabel}>Navrhovana vaha</Text>
-            <View style={styles.weightAdjustRow}>
-              <Pressable onPress={() => adjustWeight(-2.5)} style={styles.adjustButton}>
-                <Text style={styles.adjustButtonLabel}>-2.5</Text>
-              </Pressable>
-              <Pressable onPress={() => adjustWeight(-1.25)} style={styles.adjustButton}>
-                <Text style={styles.adjustButtonLabel}>-1.25</Text>
-              </Pressable>
-              <TextInput
-                value={weightKg}
-                onChangeText={handleWorkingWeightChange}
-                keyboardType="decimal-pad"
-                placeholder="Zadaj kg"
-                placeholderTextColor={colors.textMuted}
-                style={styles.weightInput}
-              />
-              <Pressable onPress={() => adjustWeight(1.25)} style={styles.adjustButton}>
-                <Text style={styles.adjustButtonLabel}>+1.25</Text>
-              </Pressable>
-              <Pressable onPress={() => adjustWeight(2.5)} style={styles.adjustButton}>
-                <Text style={styles.adjustButtonLabel}>+2.5</Text>
-              </Pressable>
-            </View>
+            {tracksWeight ? (
+              <>
+                <Text style={styles.fieldLabel}>Navrhovana vaha</Text>
+                <View style={styles.weightAdjustRow}>
+                  <Pressable onPress={() => adjustWeight(-2.5)} style={styles.adjustButton}>
+                    <Text style={styles.adjustButtonLabel}>-2.5</Text>
+                  </Pressable>
+                  <Pressable onPress={() => adjustWeight(-1.25)} style={styles.adjustButton}>
+                    <Text style={styles.adjustButtonLabel}>-1.25</Text>
+                  </Pressable>
+                  <TextInput
+                    value={weightKg}
+                    onChangeText={handleWorkingWeightChange}
+                    keyboardType="decimal-pad"
+                    placeholder="Zadaj kg"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.weightInput}
+                  />
+                  <Pressable onPress={() => adjustWeight(1.25)} style={styles.adjustButton}>
+                    <Text style={styles.adjustButtonLabel}>+1.25</Text>
+                  </Pressable>
+                  <Pressable onPress={() => adjustWeight(2.5)} style={styles.adjustButton}>
+                    <Text style={styles.adjustButtonLabel}>+2.5</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <View style={styles.bodyweightInfoCard}>
+                <Text style={styles.bodyweightInfoTitle}>Vlastna vaha</Text>
+                <Text style={styles.bodyweightInfoText}>
+                  Kg tu nezapisujeme. Ak raz pojdes s vestou alebo kotucom, zapiseme to
+                  zatial do poznamky a neskor dorobime samostatne pole.
+                </Text>
+              </View>
+            )}
 
             <View style={styles.inlineFields}>
               <View style={styles.inlineField}>
@@ -1157,40 +1342,6 @@ export function MachineDetailScreen({
             </View>
 
             <Text style={styles.fieldLabel}>Serie k tomuto cviku</Text>
-            {activeRestTimer ? (
-              <View style={styles.timerCard}>
-                <Text style={styles.timerTitle}>
-                  Pauza po {activeRestTimer.setNumber}. serii
-                </Text>
-                <Text style={styles.timerValue}>
-                  Dalsia seria za: {formatTimer(activeRestTimer.remainingSec)}
-                </Text>
-                <View style={styles.timerActions}>
-                  <Pressable
-                    onPress={() => {
-                      triggerTapHaptic();
-                      setActiveRestTimer(null);
-                    }}
-                    style={styles.timerButton}
-                  >
-                    <Text style={styles.timerButtonText}>Preskocit</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      triggerTapHaptic();
-                      setActiveRestTimer((current) =>
-                        current
-                          ? { ...current, remainingSec: current.remainingSec + 30 }
-                          : current
-                      );
-                    }}
-                    style={styles.timerButtonStrong}
-                  >
-                    <Text style={styles.timerButtonStrongText}>+30 sek</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
             <View style={styles.setStack}>
               {setLogs.map((setLog) => {
                 const workingIndex =
@@ -1201,6 +1352,10 @@ export function MachineDetailScreen({
                         .filter((item) => item.setType !== "warmup").length;
                 const setTitle = getSetTitle(setLog, workingIndex);
                 const isCollapsed = setLog.completed && collapsedSetIds[setLog.id] !== false;
+                const hasNextUncompletedSet = setLogs.some(
+                  (nextSetLog) =>
+                    nextSetLog.setNumber > setLog.setNumber && !nextSetLog.completed
+                );
 
                 if (isCollapsed) {
                   return (
@@ -1208,7 +1363,9 @@ export function MachineDetailScreen({
                       <View style={styles.collapsedSetTextWrap}>
                         <Text style={styles.collapsedSetTitle}>OK {setTitle}</Text>
                         <Text style={styles.collapsedSetMeta}>
-                          {setLog.weightKg ?? 0} kg x {setLog.reps ?? 0} op.
+                          {tracksWeight
+                            ? `${setLog.weightKg ?? 0} kg x ${setLog.reps ?? 0} op.`
+                            : `vlastna vaha x ${setLog.reps ?? 0} op.`}
                         </Text>
                       </View>
                       <Pressable
@@ -1271,26 +1428,32 @@ export function MachineDetailScreen({
                                 : styles.setTimerButtonText
                             }
                           >
-                            {setLog.completed ? "Hotovo" : "Hotovo + pauza"}
+                            {setLog.completed
+                              ? "Hotovo"
+                              : hasNextUncompletedSet
+                                ? "Hotovo + pauza"
+                                : "Hotovo"}
                           </Text>
                         </Pressable>
                       </View>
                     </View>
                     <View style={styles.inlineFields}>
-                      <View style={styles.inlineField}>
-                        <Text style={styles.setFieldLabel}>kg</Text>
-                        <TextInput
-                          value={setLog.weightKg ? String(setLog.weightKg) : weightKg}
-                          onChangeText={(value) =>
-                            updateSetLog(setLog.setNumber, {
-                              manualOverride: true,
-                              weightKg: Number(value) || undefined
-                            })
-                          }
-                          keyboardType="decimal-pad"
-                          style={styles.miniInput}
-                        />
-                      </View>
+                      {tracksWeight ? (
+                        <View style={styles.inlineField}>
+                          <Text style={styles.setFieldLabel}>kg</Text>
+                          <TextInput
+                            value={setLog.weightKg ? String(setLog.weightKg) : weightKg}
+                            onChangeText={(value) =>
+                              updateSetLog(setLog.setNumber, {
+                                manualOverride: true,
+                                weightKg: Number(value) || undefined
+                              })
+                            }
+                            keyboardType="decimal-pad"
+                            style={styles.miniInput}
+                          />
+                        </View>
+                      ) : null}
                       <View style={styles.inlineField}>
                         <Text style={styles.setFieldLabel}>op.</Text>
                         <TextInput
@@ -1463,8 +1626,15 @@ export function MachineDetailScreen({
               <Text style={styles.timelineText}>
                 {isCardio
                   ? `${entry.durationMin ?? 0} min - ${entry.speedKph ?? 0} km/h - ${entry.inclinePercent ?? 0} %`
-                  : `${entry.weightKg ?? 0} kg - ${entry.sets ?? 0} serie - ${entry.reps ?? 0} opakovani`}
+                  : entry.weightKg
+                    ? `${entry.weightKg} kg - ${entry.sets ?? 0} serie - ${entry.reps ?? 0} opakovani`
+                    : `vlastna vaha - ${entry.sets ?? 0} serie - ${entry.reps ?? 0} opakovani`}
               </Text>
+              {entry.exerciseVariantNameSk ? (
+                <Text style={styles.timelineText}>
+                  Variant: {entry.exerciseVariantNameSk}
+                </Text>
+              ) : null}
               {entry.feeling ? (
                 <Text style={styles.timelineText}>
                   Pocit: {translateFeeling(entry.feeling)}
@@ -1486,7 +1656,9 @@ export function MachineDetailScreen({
                   {entry.setLogs
                     .map(
                       (setLog) =>
-                        `${setLog.setNumber}. ${setLog.weightKg ?? 0}kg x ${setLog.reps ?? 0} (RPE ${setLog.rpe ?? "-"})`
+                        `${setLog.setNumber}. ${
+                          setLog.weightKg ? `${setLog.weightKg}kg` : "vlastna vaha"
+                        } x ${setLog.reps ?? 0} (RPE ${setLog.rpe ?? "-"})`
                     )
                     .join(" | ")}
                 </Text>
@@ -1519,15 +1691,54 @@ export function MachineDetailScreen({
         </View>
       </Modal>
     </ScrollView>
+    {activeRestTimer ? (
+      <View style={styles.floatingTimerCard}>
+        <Text style={styles.timerTitle}>
+          Pauza po {activeRestTimer.setNumber}. serii
+        </Text>
+        <Text style={styles.timerValue}>
+          {formatTimer(activeRestTimer.remainingSec)}
+        </Text>
+        <Text style={styles.timerSubtitle}>Dalsia seria za chvilu. Nadych, vydych, Swarcik caka.</Text>
+        <View style={styles.timerActions}>
+          <Pressable
+            onPress={() => {
+              triggerTapHaptic();
+              setActiveRestTimer(null);
+            }}
+            style={styles.timerButton}
+          >
+            <Text style={styles.timerButtonText}>Preskocit</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              triggerTapHaptic();
+              setActiveRestTimer((current) =>
+                current
+                  ? { ...current, remainingSec: current.remainingSec + 30 }
+                  : current
+              );
+            }}
+            style={styles.timerButtonStrong}
+          >
+            <Text style={styles.timerButtonStrongText}>+30 sek</Text>
+          </Pressable>
+        </View>
+      </View>
+    ) : null}
+    </View>
   );
 }
 
 function createStyles(colors: AppColors) {
   return StyleSheet.create({
+  screenRoot: {
+    flex: 1
+  },
   content: {
     padding: 20,
     gap: 18,
-    paddingBottom: 32
+    paddingBottom: 220
   },
   topActions: {
     marginTop: 10,
@@ -1900,6 +2111,75 @@ function createStyles(colors: AppColors) {
   choiceButtonTextActive: {
     color: "#fff8ee"
   },
+  variantBox: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceStrong,
+    padding: 14,
+    gap: 10,
+    marginTop: 8
+  },
+  variantTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  variantGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  variantButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.inputSurface,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  variantButtonActive: {
+    backgroundColor: colors.highlight,
+    borderColor: colors.highlight
+  },
+  variantButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  variantButtonTextActive: {
+    color: "#fff8ee"
+  },
+  variantDescription: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700"
+  },
+  variantHint: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19
+  },
+  bodyweightInfoCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: "rgba(47, 122, 87, 0.16)",
+    padding: 14,
+    gap: 6,
+    marginBottom: 12
+  },
+  bodyweightInfoTitle: {
+    color: colors.success,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  bodyweightInfoText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20
+  },
   timerCard: {
     minHeight: 260,
     borderRadius: 30,
@@ -1916,6 +2196,26 @@ function createStyles(colors: AppColors) {
     shadowRadius: 26,
     elevation: 6
   },
+  floatingTimerCard: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 18,
+    zIndex: 30,
+    minHeight: 230,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: colors.success,
+    backgroundColor: colors.surface,
+    padding: 22,
+    gap: 12,
+    justifyContent: "center",
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 1,
+    shadowRadius: 28,
+    elevation: 20
+  },
   timerTitle: {
     color: colors.success,
     fontSize: 16,
@@ -1929,6 +2229,13 @@ function createStyles(colors: AppColors) {
     lineHeight: 56,
     fontWeight: "900",
     textAlign: "center"
+  },
+  timerSubtitle: {
+    color: colors.textMuted,
+    textAlign: "center",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "800"
   },
   timerActions: {
     flexDirection: "row",
@@ -2299,6 +2606,18 @@ function translateSetupLabel(label: string) {
 
   if (label === "Free weights") {
     return "konkretny cvik, vaha a pocit";
+  }
+
+  if (label === "Exercise variant") {
+    return "variant cviku";
+  }
+
+  if (label === "Assistance weight") {
+    return "dopomoc stroja";
+  }
+
+  if (label === "Bodyweight") {
+    return "vlastna vaha";
   }
 
   return label.toLowerCase();

@@ -15,7 +15,7 @@ import { CameraPrepScreen } from "./src/screens/CameraPrepScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
 import { HomeScreen, TrainerSessionSettings } from "./src/screens/HomeScreen";
 import { MachineDetailScreen } from "./src/screens/MachineDetailScreen";
-import { MachinesScreen } from "./src/screens/MachinesScreen";
+import { MachinesListState, MachinesScreen } from "./src/screens/MachinesScreen";
 import { mockMachines } from "./src/data/mockData";
 import {
   AppTab,
@@ -259,6 +259,11 @@ function AppShell() {
   const [activeTab, setActiveTab] = useState<AppTab>("home");
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedMachineSource, setSelectedMachineSource] = useState<"home" | "machines">("machines");
+  const [machinesListState, setMachinesListState] = useState<MachinesListState>({
+    searchQuery: "",
+    selectedFilter: "Vsetko",
+    scrollY: 0
+  });
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [favoriteMachineIds, setFavoriteMachineIds] = useState<string[]>([]);
   const [userExerciseProfiles, setUserExerciseProfiles] = useState<
@@ -269,6 +274,7 @@ function AppShell() {
     warmupMin: 8,
     cooldownMin: 5,
     manualFocus: null,
+    activeFocus: null,
     readiness: {
       energia: 3,
       spanok: "priemerny",
@@ -671,6 +677,8 @@ function AppShell() {
 
   const saveWorkoutEntry = ({
     machineId,
+    exerciseVariantId,
+    exerciseVariantNameSk,
     weightKg,
     sets,
     reps,
@@ -687,6 +695,8 @@ function AppShell() {
     note
   }: {
     machineId: string;
+    exerciseVariantId?: string;
+    exerciseVariantNameSk?: string;
     weightKg?: number;
     sets?: number;
     reps?: number;
@@ -725,6 +735,8 @@ function AppShell() {
     const newEntry = {
       id: `entry-${machineId}-${now.getTime()}`,
       machineId,
+      exerciseVariantId,
+      exerciseVariantNameSk,
       weightKg,
       sets,
       reps,
@@ -1036,8 +1048,15 @@ function AppShell() {
     content = (
       <MachinesScreen
         favoriteMachineIds={favoriteMachineIds}
+        listState={machinesListState}
         machineUsageCounts={machineUsageCounts}
         machines={mockMachines}
+        onChangeListState={(nextListState) =>
+          setMachinesListState((currentListState) => ({
+            ...currentListState,
+            ...nextListState
+          }))
+        }
         onOpenCamera={openCameraPrep}
         onOpenMachine={(machine) => openMachine(machine, "machines")}
       />

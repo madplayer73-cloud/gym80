@@ -89,6 +89,17 @@ export type TechniqueQuality = "cista" | "prijatelna" | "zla";
 
 export type TrainingSetType = "warmup" | "working";
 
+export type MachineLoadType = "weighted" | "assisted" | "bodyweight";
+
+export type MachineExerciseVariant = {
+  id: string;
+  nameSk: string;
+  descriptionSk: string;
+  muscleGroup?: MuscleGroup;
+  loadType?: MachineLoadType;
+  setupNoteLabel?: string;
+};
+
 export type Machine = {
   id: string;
   brand: "Gym80" | "Volne vahy" | "Trener";
@@ -102,6 +113,7 @@ export type Machine = {
   imageAssets?: string[];
   videoUrl?: string;
   setupNoteLabel?: string;
+  exerciseVariants?: MachineExerciseVariant[];
   subgroup?: string;
   exerciseType?: ExerciseType;
   difficulty?: ExerciseDifficulty;
@@ -145,6 +157,8 @@ export type TrainingSetLog = {
 export type WorkoutEntry = {
   id: string;
   machineId: string;
+  exerciseVariantId?: string;
+  exerciseVariantNameSk?: string;
   weightKg?: number;
   sets?: number;
   reps?: number;

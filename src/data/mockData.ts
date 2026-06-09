@@ -45,7 +45,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Standing calf machine with shoulder pads and foot platform",
     descriptionSk:
       "Stroj na vytlacanie cez spicky v stoji. Precvičuje hlavne lytka.",
-    imageAsset: "lytka-v-stoji.jpg",
+    imageAsset: "3006_lytka-v-stoji_1.webp",
+    imageAssets: [
+      "3006_lytka-v-stoji_2.webp"
+    ],
+    videoUrl: "https://youtu.be/gZyvJS3TCvw?si=nMfM0X0TXT0v15Qf",
     setupNoteLabel: "Foot stance"
   },
   {
@@ -130,7 +134,33 @@ export const mockMachines: Machine[] = [
       "3017_zhyby-a-dipy-s-dopomocou_2.jpg"
     ],
     videoUrl: "https://youtu.be/L05qvFArXmE?si=4zUJslNv_2X3G2un",
-    setupNoteLabel: "Seat depth"
+    setupNoteLabel: "Exercise variant",
+    exerciseVariants: [
+      {
+        id: "assisted-wide-pull-up",
+        nameSk: "Zhyby s dopomocou - siroky uchop",
+        descriptionSk: "Siroky uchop viac zatazi chrbat a sirku chrbta. Vaha znamena dopomoc stroja.",
+        muscleGroup: "Chrbat",
+        loadType: "assisted",
+        setupNoteLabel: "Assistance weight"
+      },
+      {
+        id: "assisted-narrow-pull-up",
+        nameSk: "Zhyby s dopomocou - uzky uchop",
+        descriptionSk: "Uzky uchop viac zapoji chrbat a ruky. Vaha znamena dopomoc stroja.",
+        muscleGroup: "Chrbat",
+        loadType: "assisted",
+        setupNoteLabel: "Assistance weight"
+      },
+      {
+        id: "assisted-dips",
+        nameSk: "Dipy s dopomocou",
+        descriptionSk: "Dipy zatazuju hlavne triceps, hrudnik a prednu cast ramien. Vaha znamena dopomoc stroja.",
+        muscleGroup: "Triceps",
+        loadType: "assisted",
+        setupNoteLabel: "Assistance weight"
+      }
+    ]
   },
   {
     id: "bodyweight-station",
@@ -147,7 +177,25 @@ export const mockMachines: Machine[] = [
       "4021_bradla-na-dipy-a-zhyby_2.jpg"
     ],
     videoUrl: "https://youtu.be/_kx544pkYJU?si=YvONldPHwE5kUCtO",
-    setupNoteLabel: "Seat depth"
+    setupNoteLabel: "Exercise variant",
+    exerciseVariants: [
+      {
+        id: "parallel-bars-dips",
+        nameSk: "Dipy vlastnou vahou",
+        descriptionSk: "Dipy na bradlach. Hlavne triceps, hrudnik a predna cast ramien.",
+        muscleGroup: "Triceps",
+        loadType: "bodyweight",
+        setupNoteLabel: "Bodyweight"
+      },
+      {
+        id: "parallel-bars-pull-up",
+        nameSk: "Zhyby vlastnou vahou",
+        descriptionSk: "Zhyby s vlastnou vahou. Hlavne chrbat a ruky.",
+        muscleGroup: "Chrbat",
+        loadType: "bodyweight",
+        setupNoteLabel: "Bodyweight"
+      }
+    ]
   },
   {
     id: "bodyweight-core-station",
@@ -164,7 +212,41 @@ export const mockMachines: Machine[] = [
       "4031_stanoviste-na-zhyby-dipy-a-brucho_2.jpg"
     ],
     videoUrl: "https://youtu.be/Yozj1b0JC9w?si=dJqVHxbD4Eff1mP0",
-    setupNoteLabel: "Seat depth"
+    setupNoteLabel: "Exercise variant",
+    exerciseVariants: [
+      {
+        id: "bodyweight-knee-raise-bent",
+        nameSk: "Brucho - zdvih kolien pokrcene",
+        descriptionSk: "Zdvih pokrcenych kolien na brucho. Zaklad je kontrola panvy a nie svihanie noh.",
+        muscleGroup: "Brucho",
+        loadType: "bodyweight",
+        setupNoteLabel: "Bodyweight"
+      },
+      {
+        id: "bodyweight-leg-raise-straight",
+        nameSk: "Brucho - zdvih noh vystrete",
+        descriptionSk: "Narocnejsi zdvih vystretych noh. Precizne tempo, bez hojdania.",
+        muscleGroup: "Brucho",
+        loadType: "bodyweight",
+        setupNoteLabel: "Bodyweight"
+      },
+      {
+        id: "bodyweight-dips",
+        nameSk: "Dipy vlastnou vahou",
+        descriptionSk: "Dipy s vlastnou vahou na triceps, hrudnik a ramena.",
+        muscleGroup: "Triceps",
+        loadType: "bodyweight",
+        setupNoteLabel: "Bodyweight"
+      },
+      {
+        id: "bodyweight-pull-up",
+        nameSk: "Zhyby vlastnou vahou",
+        descriptionSk: "Zhyby s vlastnou vahou na chrbat a ruky.",
+        muscleGroup: "Chrbat",
+        loadType: "bodyweight",
+        setupNoteLabel: "Bodyweight"
+      }
+    ]
   },
   {
     id: "seated-abdominal-machine",
@@ -193,8 +275,30 @@ export const mockMachines: Machine[] = [
     imageHint: "Squat machine with outward knee drive",
     descriptionSk:
       "Stroj na drepovy pohyb s roztlacanim noh do stran. Precvičuje hlavne boky stehien, zadok a vonkajsiu cast noh.",
-    imageAsset: "roztahovanie-noh-v-drepe.jpg",
-    setupNoteLabel: "Seat depth"
+    imageAsset: "3028_roznozovanie-v-sede_1.webp",
+    imageAssets: [
+      "3028_roznozovanie-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/SC2SSQCzvBg?si=4KVGxGbH3IrSzTDH",
+    setupNoteLabel: "Exercise variant",
+    exerciseVariants: [
+      {
+        id: "squat-leg-abduction",
+        nameSk: "Roztahovanie noh v drepe",
+        descriptionSk: "Kolena tlacia smerom von. Precvičuje hlavne boky stehien, zadok a vonkajsiu cast noh.",
+        muscleGroup: "Nohy",
+        loadType: "weighted",
+        setupNoteLabel: "Exercise variant"
+      },
+      {
+        id: "squat-leg-adduction",
+        nameSk: "Stahovanie noh v drepe",
+        descriptionSk: "Kolena tlacia smerom dnu proti odporu. Precvičuje hlavne vnutornu cast stehien.",
+        muscleGroup: "Nohy",
+        loadType: "weighted",
+        setupNoteLabel: "Exercise variant"
+      }
+    ]
   },
   {
     id: "biceps-curl-preacher",
@@ -206,9 +310,8 @@ export const mockMachines: Machine[] = [
     imageHint: "Preacher curl machine with angled arm pad",
     descriptionSk:
       "Stroj na bicepsovy zdvih s opretimi rukami. Precvičuje hlavne bicepsy.",
-    imageAsset: "bicepsovy-zdvih.jpg",
+    imageAsset: "bicepsovy-zdvih-opierka-overview.jpg",
     imageAssets: [
-      "bicepsovy-zdvih-opierka-overview.jpg",
       "bicepsovy-zdvih-opierka-nc.webp"
     ],
     videoUrl: "https://youtu.be/drpIj2RZmEU?si=OJY-EJsF8kiRuMmH",
@@ -224,7 +327,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Preacher bench for biceps curls",
     descriptionSk:
       "Lavicka na bicepsove zdvihy s oporou ruk. Precvičuje hlavne bicepsy.",
-    imageAsset: "scottova-lavicka-na-biceps.jpg",
+    imageAsset: "4093_scottova-lavicka-na-biceps_1.webp",
+    imageAssets: [
+      "4093_scottova-lavicka-na-biceps_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/40ZYyh7y3zA?si=CbZ_ZFVyu1JuR83E",
     setupNoteLabel: "Seat height"
   },
   {
@@ -288,9 +395,8 @@ export const mockMachines: Machine[] = [
     imageHint: "Downward pressing chest machine",
     descriptionSk:
       "Stroj na tlacenie ruk nadol a dopredu v sede. Precvičuje hlavne spodnu cast hrudnika, tricepsy a prednu cast ramien.",
-    imageAsset: "tlaky-na-hrudnik-nadol-v-sede.jpg",
+    imageAsset: "3036_tlaky-na-hrudnik-nadol-v-sede_1.webp",
     imageAssets: [
-      "3036_tlaky-na-hrudnik-nadol-v-sede_1.webp",
       "3036_tlaky-na-hrudnik-nadol-v-sede_2.jpg"
     ],
     videoUrl: "https://youtu.be/iBrnSfp3eVs?si=Ka8BJhVo3PT7gK3z",
@@ -422,7 +528,11 @@ export const mockMachines: Machine[] = [
     imageHint: "Seated shoulder press machine",
     descriptionSk:
       "Stroj na vytlacanie ruk nad hlavu v sede. Precvičuje hlavne ramena a tricepsy.",
-    imageAsset: "tlaky-na-ramena-v-sede.jpg",
+    imageAsset: "3032_tlaky-na-ramena-v-sede_1.webp",
+    imageAssets: [
+      "3032_tlaky-na-ramena-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/Jm-bQ9AhRlA?si=fQbo-o1hp6YEB27z",
     setupNoteLabel: "Seat height"
   },
   {
@@ -818,6 +928,23 @@ export const mockMachines: Machine[] = [
     setupNoteLabel: "Seat depth"
   },
   {
+    id: "seated-adduction-machine",
+    brand: "Gym80",
+    modelName: "Seated Adduction Machine",
+    displayNameSk: "Znozovanie v sede",
+    category: "Selectorized",
+    muscleGroup: "Nohy",
+    imageHint: "Seated hip adduction machine",
+    descriptionSk:
+      "Stroj na tlacenie noh smerom k sebe v sede. Precvicuje hlavne vnutornu cast stehien.",
+    imageAsset: "3029_znozovanie-v-sede_1.webp",
+    imageAssets: [
+      "3029_znozovanie-v-sede_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/afGkOsSZxWw?si=x5D-_TE5849WHJbY",
+    setupNoteLabel: "Seat depth"
+  },
+  {
     id: "leg-press-45",
     brand: "Gym80",
     modelName: "45 Degree Leg Press",
@@ -864,6 +991,23 @@ export const mockMachines: Machine[] = [
       "4097_basic_press_bench_2.jpg"
     ],
     videoUrl: "https://youtu.be/rTW67E2R_Pw?si=KnvJzBIzi1imNGuP",
+    setupNoteLabel: "Bench position"
+  },
+  {
+    id: "incline-press-bench-free",
+    brand: "Gym80",
+    modelName: "Incline Press Bench",
+    displayNameSk: "Sikma lavicka na tlaky",
+    category: "Bench",
+    muscleGroup: "Hrudnik",
+    imageHint: "Incline press bench with barbell rack",
+    descriptionSk:
+      "Sikma lavicka na tlaky s velkou cinkou. Precvičuje hlavne vrchnu cast hrudnika, prednu cast ramien a triceps.",
+    imageAsset: "4096_basic_press_bench_1.webp",
+    imageAssets: [
+      "4096_basic_press_bench_2.jpg"
+    ],
+    videoUrl: "https://youtu.be/YDZP1O22BFc?si=eb3VNO-6m-pRKBLt",
     setupNoteLabel: "Bench position"
   },
   {

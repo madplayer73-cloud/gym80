@@ -247,7 +247,9 @@ export function HistoryScreen({
                   typeof entry.speedKph !== "number";
                 const primaryMeta = isCardio
                   ? `${entry.durationMin ?? 0} min`
-                  : `${entry.weightKg ?? 0} kg`;
+                  : entry.weightKg
+                    ? `${entry.weightKg} kg`
+                    : "vlastna vaha";
                 const secondaryMeta = isRoutine
                   ? "treningova rutina"
                   : isCardio
@@ -264,6 +266,11 @@ export function HistoryScreen({
                         <Text style={styles.entryTitle}>
                           {machine?.displayNameSk ?? entry.machineId}
                         </Text>
+                        {entry.exerciseVariantNameSk ? (
+                          <Text style={styles.entryMeta}>
+                            {entry.exerciseVariantNameSk}
+                          </Text>
+                        ) : null}
                         <Text style={styles.entryTime}>
                           {new Date(entry.completedAt).toLocaleTimeString("sk-SK", {
                             hour: "2-digit",

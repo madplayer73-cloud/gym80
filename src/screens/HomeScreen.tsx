@@ -52,6 +52,7 @@ export type TrainerSessionSettings = {
   warmupMin: number;
   cooldownMin: number;
   manualFocus: WorkoutFocus | null;
+  activeFocus: WorkoutFocus | null;
   readiness: ReadinessCheck;
   hasStarted: boolean;
 };
@@ -147,6 +148,7 @@ export function HomeScreen({
     warmupMin,
     cooldownMin,
     manualFocus,
+    activeFocus,
     readiness = defaultReadiness,
     hasStarted
   } = trainerSettings;
@@ -162,16 +164,18 @@ export function HomeScreen({
         ...readiness,
         ...nextReadiness
       },
+      activeFocus: null,
       hasStarted: false
     });
   };
+  const preferredFocus = hasStarted && activeFocus ? activeFocus : manualFocus ?? undefined;
   const suggestion = buildDailySuggestion(
     sessions,
     machines,
     durationMin,
     warmupMin,
     cooldownMin,
-    manualFocus ?? undefined
+    preferredFocus
   );
   const trainerPlan = generateTrainerPlan({
     sessions,
@@ -287,7 +291,11 @@ export function HomeScreen({
                     key={option}
                     onPress={() => {
                       triggerTapHaptic();
-                      updateTrainerSettings({ durationMin: option, hasStarted: false });
+                      updateTrainerSettings({
+                        durationMin: option,
+                        activeFocus: null,
+                        hasStarted: false
+                      });
                     }}
                     style={[styles.durationButton, isActive ? styles.durationButtonActive : null]}
                   >
@@ -313,7 +321,11 @@ export function HomeScreen({
                     key={option}
                     onPress={() => {
                       triggerTapHaptic();
-                      updateTrainerSettings({ warmupMin: option, hasStarted: false });
+                      updateTrainerSettings({
+                        warmupMin: option,
+                        activeFocus: null,
+                        hasStarted: false
+                      });
                     }}
                     style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
                   >
@@ -339,7 +351,11 @@ export function HomeScreen({
                     key={option}
                     onPress={() => {
                       triggerTapHaptic();
-                      updateTrainerSettings({ cooldownMin: option, hasStarted: false });
+                      updateTrainerSettings({
+                        cooldownMin: option,
+                        activeFocus: null,
+                        hasStarted: false
+                      });
                     }}
                     style={[styles.durationButtonSmall, isActive ? styles.durationButtonActive : null]}
                   >
@@ -477,6 +493,7 @@ export function HomeScreen({
             triggerTapHaptic();
             updateTrainerSettings({
               manualFocus: getNextFocus(suggestion.focus),
+              activeFocus: null,
               hasStarted: false
             });
             setExpandedWhyId(null);
@@ -494,7 +511,10 @@ export function HomeScreen({
             triggerSuccessHaptic();
             setSetupSavedMessage("Startnute. Nastavenia som schoval, ideme makat.");
             setIsSetupExpanded(false);
-            updateTrainerSettings({ hasStarted: true });
+            updateTrainerSettings({
+              activeFocus: suggestion.focus,
+              hasStarted: true
+            });
           }}
           style={[styles.startWorkoutButton, hasStarted ? styles.startWorkoutButtonActive : null]}
         >

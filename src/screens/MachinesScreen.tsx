@@ -1,6 +1,8 @@
 import React from "react";
 import {
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,13 +18,21 @@ import { getMachineImage } from "../utils/machineImages";
 
 type MachinesScreenProps = {
   favoriteMachineIds: string[];
+  listState?: MachinesListState;
   machineUsageCounts: Record<string, number>;
   machines: Machine[];
+  onChangeListState?: (nextState: Partial<MachinesListState>) => void;
   onOpenCamera: () => void;
   onOpenMachine: (machine: Machine) => void;
 };
 
-type MachineFilter = MuscleGroup | "Vsetko" | "Oblubene";
+export type MachineFilter = MuscleGroup | "Vsetko" | "Oblubene";
+
+export type MachinesListState = {
+  searchQuery: string;
+  selectedFilter: MachineFilter;
+  scrollY: number;
+};
 
 const filterOptions: Array<{ label: string; value: MachineFilter }> = [
   { label: "Vsetko", value: "Vsetko" },
@@ -40,15 +50,20 @@ const filterOptions: Array<{ label: string; value: MachineFilter }> = [
 
 export function MachinesScreen({
   favoriteMachineIds,
+  listState,
   machineUsageCounts,
   machines,
+  onChangeListState,
   onOpenCamera,
   onOpenMachine
 }: MachinesScreenProps) {
   const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [selectedFilter, setSelectedFilter] = React.useState<MachineFilter>("Vsetko");
+  const scrollRef = React.useRef<ScrollView | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState(listState?.searchQuery ?? "");
+  const [selectedFilter, setSelectedFilter] = React.useState<MachineFilter>(
+    listState?.selectedFilter ?? "Vsetko"
+  );
   const favoriteMachineIdSet = React.useMemo(
     () => new Set(favoriteMachineIds),
     [favoriteMachineIds]
@@ -135,8 +150,39 @@ export function MachinesScreen({
     </Pressable>
   );
 
+  React.useEffect(() => {
+    const storedScrollY = listState?.scrollY ?? 0;
+
+    if (storedScrollY <= 0) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: storedScrollY, animated: false });
+    });
+  }, []);
+
+  const updateSearchQuery = (nextQuery: string) => {
+    setSearchQuery(nextQuery);
+    onChangeListState?.({ searchQuery: nextQuery, scrollY: 0 });
+  };
+
+  const updateSelectedFilter = (nextFilter: MachineFilter) => {
+    setSelectedFilter(nextFilter);
+    onChangeListState?.({ selectedFilter: nextFilter, scrollY: 0 });
+  };
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    onChangeListState?.({ scrollY: event.nativeEvent.contentOffset.y });
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView
+      ref={scrollRef}
+      contentContainerStyle={styles.content}
+      onScroll={handleScroll}
+      scrollEventThrottle={120}
+    >
       <Text style={styles.title}>Stroje v databaze</Text>
       <Text style={styles.subtitle}>
         Toto je zaklad pre neskorsie rozpoznavanie z fotky. Kazdy stroj uz ma svoju historiu a poznamky.
@@ -151,7 +197,7 @@ export function MachinesScreen({
 
       <TextInput
         value={searchQuery}
-        onChangeText={setSearchQuery}
+        onChangeText={updateSearchQuery}
         placeholder="Hladaj stroj, partiu alebo cislo"
         placeholderTextColor={colors.textMuted}
         style={styles.searchInput}
@@ -168,7 +214,7 @@ export function MachinesScreen({
           return (
             <Pressable
               key={filter.value}
-              onPress={() => setSelectedFilter(filter.value)}
+              onPress={() => updateSelectedFilter(filter.value)}
               style={[styles.filterChip, isActive ? styles.filterChipActive : null]}
             >
               <Text
@@ -359,6 +405,18 @@ function translateSetupLabel(label: string) {
 
   if (label === "Free weights") {
     return "konkretny cvik, vaha a pocit";
+  }
+
+  if (label === "Exercise variant") {
+    return "variant cviku";
+  }
+
+  if (label === "Assistance weight") {
+    return "dopomoc stroja";
+  }
+
+  if (label === "Bodyweight") {
+    return "vlastna vaha";
   }
 
   return label.toLowerCase();
