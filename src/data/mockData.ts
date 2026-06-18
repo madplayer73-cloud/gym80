@@ -536,19 +536,6 @@ export const mockMachines: Machine[] = [
     setupNoteLabel: "Seat height"
   },
   {
-    id: "incline-shoulder-press",
-    brand: "Gym80",
-    modelName: "Incline Shoulder Press",
-    displayNameSk: "Tlaky na ramená šikmo",
-    category: "Plate Loaded",
-    muscleGroup: "Ramena",
-    imageHint: "Incline shoulder press machine",
-    descriptionSk:
-      "Stroj na vytlacanie ruk v sikmom smere. Precvičuje hlavne ramena a tricepsy.",
-    imageAsset: "tlaky-na-ramena-sikmo.jpg",
-    setupNoteLabel: "Seat height"
-  },
-  {
     id: "seated-shoulder-press-support",
     brand: "Gym80",
     modelName: "Seated Shoulder Press Support",
@@ -861,9 +848,8 @@ export const mockMachines: Machine[] = [
     imageHint: "Chest press machine with back support",
     descriptionSk:
       "Stroj na odtlacanie ruk dopredu v sede s oporou chrbta. Precvičuje hlavne hrudnik, prednu cast ramien a tricepsy.",
-    imageAsset: "tlaky-na-hrudnik-s-opierkou.jpg",
+    imageAsset: "3012_tlaky-na-hrudnik-s-opierkou_1.webp",
     imageAssets: [
-      "3012_tlaky-na-hrudnik-s-opierkou_1.webp",
       "3012_tlaky-na-hrudnik-s-opierkou_2.jpg"
     ],
     videoUrl: "https://youtu.be/deSi2MC-UOY?si=FTGguecw1k6CrLe9",

@@ -153,7 +153,6 @@ const machineImages: Record<string, ImageSourcePropType> = {
   "tlaky-na-hrudnik-sikmo.jpg": require("../../assets/machines/tlaky-na-hrudnik-sikmo.jpg"),
   "tlaky-na-hrudnik-v-lahu.jpg": require("../../assets/machines/tlaky-na-hrudnik-v-lahu.jpg"),
   "tlaky-na-ramena-nahor-sikmo.jpg": require("../../assets/machines/tlaky-na-ramena-nahor-sikmo.jpg"),
-  "tlaky-na-ramena-sikmo.jpg": require("../../assets/machines/tlaky-na-ramena-sikmo.jpg"),
   "tlaky-na-ramena-v-sede-s-opierkou.jpg": require("../../assets/machines/tlaky-na-ramena-v-sede-s-opierkou.jpg"),
   "tricepsovy-tlak-v-sede.jpg": require("../../assets/machines/tricepsovy tlak v sede.jpg"),
   "vypony-na-lytka-v-sede-s-oporou.jpg": require("../../assets/machines/vypony-na-lytka-v-sede-s-oporou.jpg"),

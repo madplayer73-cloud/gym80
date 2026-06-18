@@ -1219,24 +1219,7 @@ function getPreviousEntryForMachine(sessions: WorkoutSession[], machineId: strin
 }
 
 function shouldUseWarmupSets(machine: Machine, meta: TrainerMachineMeta) {
-  const text = getMachineSearchText(machine);
-
-  return (
-    meta.exerciseType === "compound" &&
-    (meta.difficulty === "hard" ||
-      meta.fatigueCost === "high" ||
-      text.includes("leg press") ||
-      text.includes("tlak nohami") ||
-      text.includes("drep") ||
-      text.includes("smith") ||
-      text.includes("hip thrust") ||
-      text.includes("chest press") ||
-      text.includes("hrudnik") ||
-      text.includes("shoulder") ||
-      text.includes("ramena") ||
-      text.includes("pritah") ||
-      text.includes("stahovanie"))
-  );
+  return meta.exerciseType !== "cardio" && meta.exerciseType !== "mobility";
 }
 
 export function buildWarmupSetRecommendations(
@@ -1250,26 +1233,32 @@ export function buildWarmupSetRecommendations(
   }
 
   if (!workingWeightKg || workingWeightKg <= 0) {
-    return [
-      { percent: 40, reps: 10, note: "lahka rozcvicovacia seria, len nacvik pohybu" },
-      { percent: 60, reps: 6, note: "stredna rozcvicovacia seria, stale bez boja" }
-    ];
+    return meta.difficulty === "hard" || meta.fatigueCost === "high"
+      ? [
+          { percent: 40, reps: 10, note: "lahka rozcvicovacia seria, len nacvik pohybu" },
+          { percent: 60, reps: 6, note: "stredna rozcvicovacia seria, stale bez boja" }
+        ]
+      : [
+          { percent: 35, reps: 10, note: "lahka rozcvicovacia seria na rozhybanie" },
+          { percent: 50, reps: 6, note: "kratka priprava pred pracovnymi seriami" }
+        ];
   }
 
-  return [
-    {
-      percent: 40,
-      weightKg: Math.round(workingWeightKg * 0.4 * 10) / 10,
-      reps: 10,
-      note: "lahka rozcvicovacia seria"
-    },
-    {
-      percent: 60,
-      weightKg: Math.round(workingWeightKg * 0.6 * 10) / 10,
-      reps: 6,
-      note: "stredna rozcvicovacia seria pred pracovnymi seriami"
-    }
-  ];
+  const warmupPlan =
+    meta.difficulty === "hard" || meta.fatigueCost === "high"
+      ? [
+          { percent: 40, reps: 10, note: "lahka rozcvicovacia seria" },
+          { percent: 60, reps: 6, note: "stredna rozcvicovacia seria pred pracovnymi seriami" }
+        ]
+      : [
+          { percent: 35, reps: 10, note: "lahka rozcvicovacia seria na rozhybanie" },
+          { percent: 50, reps: 6, note: "kratka priprava pred pracovnymi seriami" }
+        ];
+
+  return warmupPlan.map((warmupSet) => ({
+    ...warmupSet,
+    weightKg: Math.round(workingWeightKg * (warmupSet.percent / 100) * 10) / 10
+  }));
 }
 
 function buildNoEgoNote(entry: WorkoutEntry | undefined, targetRepMin: number) {
