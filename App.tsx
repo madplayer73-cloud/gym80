@@ -515,9 +515,7 @@ function AppShell() {
         const cloudSessionsAreValid =
           Array.isArray(cloudData?.sessions) &&
           cloudData.sessions.every(isWorkoutSession);
-        const shouldUseCloudData =
-          cloudSessionsAreValid &&
-          (cloudData.sessions.length > 0 || sessions.length === 0);
+        const shouldUseCloudData = cloudSessionsAreValid;
 
         if (shouldUseCloudData) {
           setSessions(cloudData.sessions);
@@ -963,6 +961,22 @@ function AppShell() {
   const clearWorkoutHistory = () => {
     setSessions([]);
     setUserExerciseProfiles({});
+    if (cloudUser && hasHydratedCloud) {
+      setCloudStatus("syncing");
+      saveCloudData(
+        buildCloudSnapshot({
+          sessions: [],
+          favoriteMachineIds,
+          userExerciseProfiles: {},
+          themeMode: mode
+        })
+      )
+        .then(() => setCloudStatus("saved"))
+        .catch((error) => {
+          console.log("Cloud clear failed", error);
+          setCloudStatus("error");
+        });
+    }
     setToastMessage("Historia zmazana");
   };
 
