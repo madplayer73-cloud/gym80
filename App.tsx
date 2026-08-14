@@ -5,6 +5,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
@@ -39,11 +40,15 @@ import {
   CloudDataSnapshot,
   CloudUser,
   fetchCloudData,
+  getCloudLoginProviderLabel,
   getCloudUser,
   initializeCloudAuth,
+  isPocketBaseCloudEnabled,
   isProductionWebHost,
   loginWithGoogle,
+  loginWithPassword,
   logoutCloudUser,
+  registerWithPassword,
   saveCloudData
 } from "./src/utils/cloudData";
 
@@ -300,6 +305,8 @@ function AppShell() {
   const [hasHydratedCloud, setHasHydratedCloud] = useState(false);
   const styles = useMemo(() => createStyles(colors), [colors]);
   const shouldRequireCloudLogin = isProductionWebHost();
+  const isPasswordCloudLogin = isPocketBaseCloudEnabled();
+  const cloudLoginProviderLabel = getCloudLoginProviderLabel();
 
   const machineMap = useMemo(
     () =>
@@ -986,7 +993,39 @@ function AppShell() {
       await loginWithGoogle();
     } catch (error) {
       console.log("Google login failed", error);
-      setToastMessage("Google prihlasenie sa nepodarilo");
+      setToastMessage("Google prihlasenie teraz nie je dostupne");
+    }
+  };
+
+  const handlePasswordLogin = async (email: string, password: string) => {
+    try {
+      setCloudStatus("syncing");
+      const user = await loginWithPassword(email, password);
+      setCloudUser(user);
+      setHasHydratedCloud(false);
+      setToastMessage("Prihlaseny");
+      return true;
+    } catch (error) {
+      console.log("Password login failed", error);
+      setCloudStatus("error");
+      setToastMessage("Prihlasenie sa nepodarilo");
+      return false;
+    }
+  };
+
+  const handlePasswordRegister = async (email: string, password: string) => {
+    try {
+      setCloudStatus("syncing");
+      const user = await registerWithPassword(email, password);
+      setCloudUser(user);
+      setHasHydratedCloud(false);
+      setToastMessage("Ucet vytvoreny");
+      return true;
+    } catch (error) {
+      console.log("Password register failed", error);
+      setCloudStatus("error");
+      setToastMessage("Registracia sa nepodarila");
+      return false;
     }
   };
 
@@ -1110,7 +1149,10 @@ function AppShell() {
         isLoading
         showExport={showAuthExport}
         hasLocalHistory={sessions.length > 0}
+        isPasswordLogin={isPasswordCloudLogin}
         onToggleExport={() => setShowAuthExport((current) => !current)}
+        onPasswordLogin={handlePasswordLogin}
+        onPasswordRegister={handlePasswordRegister}
         onGoogleLogin={handleGoogleLogin}
       />
     );
@@ -1123,7 +1165,10 @@ function AppShell() {
         exportValue={historyExportValue}
         showExport={showAuthExport}
         hasLocalHistory={sessions.length > 0}
+        isPasswordLogin={isPasswordCloudLogin}
         onToggleExport={() => setShowAuthExport((current) => !current)}
+        onPasswordLogin={handlePasswordLogin}
+        onPasswordRegister={handlePasswordRegister}
         onGoogleLogin={handleGoogleLogin}
       />
     );
@@ -1169,6 +1214,7 @@ function AppShell() {
       <SideMenu
         cloudStatus={cloudStatus}
         cloudUserEmail={cloudUser?.email}
+        loginLabel={`Prihlasit cez ${cloudLoginProviderLabel}`}
         hasHistory={sessions.length > 0}
         isOpen={isMenuOpen}
         onClearHistory={clearWorkoutHistory}
@@ -1185,20 +1231,62 @@ function AuthGate({
   colors,
   exportValue,
   hasLocalHistory,
+  isPasswordLogin,
   isLoading,
   showExport,
   onToggleExport,
-  onGoogleLogin
+  onGoogleLogin,
+  onPasswordLogin,
+  onPasswordRegister
 }: {
   colors: AppColors;
   exportValue: string;
   hasLocalHistory: boolean;
+  isPasswordLogin: boolean;
   isLoading?: boolean;
   showExport: boolean;
   onToggleExport: () => void;
   onGoogleLogin: () => void;
+  onPasswordLogin: (email: string, password: string) => Promise<boolean>;
+  onPasswordRegister: (email: string, password: string) => Promise<boolean>;
 }) {
   const styles = React.useMemo(() => createAuthStyles(colors), [colors]);
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const submitPasswordAuth = async (mode: "login" | "register") => {
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail || !password) {
+      setFormError("Zadaj email aj heslo.");
+      return;
+    }
+
+    if (password.length < 8) {
+      setFormError("Heslo musi mat aspon 8 znakov.");
+      return;
+    }
+
+    setFormError(null);
+    setIsSubmitting(true);
+
+    const ok =
+      mode === "login"
+        ? await onPasswordLogin(normalizedEmail, password)
+        : await onPasswordRegister(normalizedEmail, password);
+
+    setIsSubmitting(false);
+
+    if (!ok) {
+      setFormError(
+        mode === "login"
+          ? "Skontroluj email a heslo."
+          : "Ucet sa nepodarilo vytvorit. Mozno uz existuje."
+      );
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1209,18 +1297,64 @@ function AuthGate({
           Kazdy pouzivatel bude mat vlastnu historiu treningov a vlastnu cloudovu
           zalohu. Ked posles link kamaratovi, neuvidi tvoje data.
         </Text>
-        <Pressable
-          disabled={isLoading}
-          onPress={onGoogleLogin}
-          style={[styles.button, isLoading ? styles.buttonDisabled : null]}
-        >
-          <Text style={styles.buttonText}>
-            {isLoading ? "Pripravujem prihlasenie..." : "Prihlasit cez Google"}
-          </Text>
-        </Pressable>
-        <Text style={styles.note}>
-          Apple prihlasenie pripravime neskor. Teraz ideme stabilny Google zaklad.
-        </Text>
+        {isPasswordLogin ? (
+          <>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              onChangeText={setEmail}
+              placeholder="Email"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              value={email}
+            />
+            <TextInput
+              onChangeText={setPassword}
+              placeholder="Heslo"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry
+              style={styles.input}
+              value={password}
+            />
+            {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+            <Pressable
+              disabled={isLoading || isSubmitting}
+              onPress={() => void submitPasswordAuth("login")}
+              style={[styles.button, isLoading || isSubmitting ? styles.buttonDisabled : null]}
+            >
+              <Text style={styles.buttonText}>
+                {isSubmitting ? "Pracujem..." : "Prihlasit sa"}
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={isLoading || isSubmitting}
+              onPress={() => void submitPasswordAuth("register")}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Vytvorit novy ucet</Text>
+            </Pressable>
+            <Text style={styles.note}>
+              Toto je ZimaBoard zaklad. Google prihlasenie doplnime, ked bude HTTPS
+              adresa.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Pressable
+              disabled={isLoading}
+              onPress={onGoogleLogin}
+              style={[styles.button, isLoading ? styles.buttonDisabled : null]}
+            >
+              <Text style={styles.buttonText}>
+                {isLoading ? "Pripravujem prihlasenie..." : "Prihlasit cez Google"}
+              </Text>
+            </Pressable>
+            <Text style={styles.note}>
+              Apple prihlasenie pripravime neskor. Teraz ideme stabilny Google zaklad.
+            </Text>
+          </>
+        )}
         {hasLocalHistory ? (
           <>
             <Pressable
@@ -1423,6 +1557,22 @@ function createAuthStyles(colors: AppColors) {
       color: colors.textMuted,
       fontSize: 13,
       lineHeight: 19
+    },
+    input: {
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.inputSurface,
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: "800",
+      paddingHorizontal: 14,
+      paddingVertical: 14
+    },
+    errorText: {
+      color: "#d9534f",
+      fontSize: 13,
+      fontWeight: "800"
     },
     secondaryButton: {
       borderRadius: 16,

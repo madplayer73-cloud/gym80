@@ -3,9 +3,20 @@ services:
     build:
       context: .
       args:
-        EXPO_PUBLIC_CLOUD_AUTH: "off"
+        EXPO_PUBLIC_CLOUD_AUTH: "pocketbase"
+        EXPO_PUBLIC_POCKETBASE_URL: "/pb"
     image: gym80-tracker:zimaboard
     container_name: gym80-tracker
     restart: unless-stopped
     ports:
       - "8088:80"
+    depends_on:
+      - gym80-pocketbase
+
+  gym80-pocketbase:
+    image: ghcr.io/muchobien/pocketbase:latest
+    container_name: gym80-pocketbase
+    restart: unless-stopped
+    volumes:
+      - ./zima-data/pocketbase:/pb_data
+      - ./pb_migrations:/pb_migrations

@@ -32,7 +32,7 @@ npm run start
 
 ## ZimaBoard / Portainer
 
-Self-host verzia bezi bez Netlify prihlasenia. Treningy sa zatial ukladaju lokalne v prehliadaci, kym doplnime vlastny Google login a databazu.
+Self-host verzia bezi bez Netlify prihlasenia. Docker compose spusti web aj PocketBase databazu. Prihlasenie je zatial email + heslo, Google doplnime po nastaveni HTTPS domeny.
 
 Lokálne overenie buildu:
 
@@ -58,7 +58,11 @@ Pre tvoju siet:
 http://192.168.31.193:8088
 ```
 
-Volitelne je pripraveny aj `docker-compose.pocketbase.yml` pre buduci vlastny cloud login a databazu mimo Netlify.
+PocketBase API je schovane pod rovnakou adresou:
+
+```text
+http://192.168.31.193:8088/pb
+```
 
 ## Dalsie kroky
 

@@ -9,6 +9,7 @@ type SideMenuProps = {
   onClearHistory: () => void;
   hasHistory: boolean;
   cloudUserEmail?: string;
+  loginLabel: string;
   cloudStatus: "loading" | "offline" | "syncing" | "saved" | "error";
   onGoogleLogin: () => void;
   onLogout: () => void;
@@ -21,6 +22,7 @@ export function SideMenu({
   onClearHistory,
   hasHistory,
   cloudUserEmail,
+  loginLabel,
   cloudStatus,
   onGoogleLogin,
   onLogout,
@@ -124,7 +126,7 @@ export function SideMenu({
                 }}
                 style={styles.cloudButton}
               >
-                <Text style={styles.cloudButtonText}>Prihlasit cez Google</Text>
+                <Text style={styles.cloudButtonText}>{loginLabel}</Text>
               </Pressable>
             )}
           </View>
