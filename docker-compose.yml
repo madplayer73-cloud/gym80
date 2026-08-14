@@ -11,13 +11,13 @@ services:
     ports:
       - "8088:80"
     depends_on:
-      - gym80-pocketbase
+      - gym80-sync
 
-  gym80-pocketbase:
-    image: ghcr.io/muchobien/pocketbase:latest
-    container_name: gym80-pocketbase
+  gym80-sync:
+    image: node:22-alpine
+    container_name: gym80-sync
     restart: unless-stopped
-    command: serve --http=0.0.0.0:8090 --dir=/pb_data --migrationsDir=/pb_migrations
+    command: node /app/sync-server.js
     volumes:
-      - ./zima-data/pocketbase:/pb_data
-      - ./pb_migrations:/pb_migrations
+      - ./server:/app:ro
+      - ./zima-data/sync:/data

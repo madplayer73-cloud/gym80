@@ -32,7 +32,7 @@ npm run start
 
 ## ZimaBoard / Portainer
 
-Self-host verzia bezi bez Netlify prihlasenia. Docker compose spusti web aj PocketBase databazu. Cez Tailscale bezime v jednoduchom CasaOS rezime: jedna spolocna zaloha historie v PocketBase bez prihlasovania. Google doplnime po nastaveni HTTPS domeny.
+Self-host verzia bezi bez Netlify prihlasenia. Docker compose spusti web aj jednoduchy sync server. Cez Tailscale bezime v CasaOS rezime: jedna spolocna zaloha historie v subore `zima-data/sync/gym80.json` bez prihlasovania. Google doplnime az vtedy, ked budeme chciet verejnu HTTPS domenu a viac oddelenych pouzivatelov.
 
 Lokálne overenie buildu:
 
@@ -58,10 +58,10 @@ Pre tvoju siet:
 http://192.168.31.193:8088
 ```
 
-PocketBase API je schovane pod rovnakou adresou:
+CasaOS sync API je schovane pod rovnakou adresou:
 
 ```text
-http://192.168.31.193:8088/pb
+http://192.168.31.193:8088/sync/gym80
 ```
 
 ## Dalsie kroky

@@ -34,6 +34,7 @@ const POCKETBASE_USER_KEY = "gym80-pocketbase-user";
 const POCKETBASE_DATA_COLLECTION = "user_data";
 const POCKETBASE_SINGLE_DATA_COLLECTION = "single_app_data";
 const POCKETBASE_SINGLE_DATA_KEY = "gym80-main";
+const CASAOS_SYNC_ENDPOINT = "/sync/gym80";
 
 declare const process:
   | {
@@ -241,8 +242,16 @@ export async function logoutCloudUser() {
 export async function fetchCloudData() {
   if (canUsePocketBase()) {
     if (isSingleUserPocketBaseCloudEnabled()) {
-      const existing = await findPocketBaseSingleDataRecord();
-      return existing?.data as CloudDataSnapshot | null;
+      const response = await fetch(CASAOS_SYNC_ENDPOINT, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error("CasaOS zaloha sa nepodarila nacitat.");
+      }
+
+      const body = (await response.json()) as { data: CloudDataSnapshot | null };
+      return body.data;
     }
 
     const user = getStoredPocketBaseUser();
@@ -276,36 +285,19 @@ export async function fetchCloudData() {
 export async function saveCloudData(snapshot: CloudDataSnapshot) {
   if (canUsePocketBase()) {
     if (isSingleUserPocketBaseCloudEnabled()) {
-      const existing = await findPocketBaseSingleDataRecord();
-      const payload = {
-        key: POCKETBASE_SINGLE_DATA_KEY,
-        data: snapshot
-      };
+      const response = await fetch(CASAOS_SYNC_ENDPOINT, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(snapshot)
+      });
 
-      const response = existing
-        ? await pocketBaseFetch(
-            `/api/collections/${POCKETBASE_SINGLE_DATA_COLLECTION}/records/${existing.id}`,
-            {
-              method: "PATCH",
-              headers: {
-                "content-type": "application/json"
-              },
-              body: JSON.stringify(payload)
-            }
-          )
-        : await pocketBaseFetch(
-            `/api/collections/${POCKETBASE_SINGLE_DATA_COLLECTION}/records`,
-            {
-              method: "POST",
-              headers: {
-                "content-type": "application/json"
-              },
-              body: JSON.stringify(payload)
-            }
-          );
+      if (!response.ok) {
+        throw new Error("CasaOS zaloha sa nepodarila ulozit.");
+      }
 
-      const body = await response.json();
-      return { ok: true as const, updatedAt: body.updated || snapshot.updatedAt };
+      return (await response.json()) as { ok: true; updatedAt: string };
     }
 
     const user = getStoredPocketBaseUser();
