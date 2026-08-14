@@ -32,7 +32,7 @@ npm run start
 
 ## ZimaBoard / Portainer
 
-Self-host verzia bezi bez Netlify prihlasenia. Docker compose spusti web aj PocketBase databazu. Prihlasenie je zatial email + heslo, Google doplnime po nastaveni HTTPS domeny.
+Self-host verzia bezi bez Netlify prihlasenia. Docker compose spusti web aj PocketBase databazu. Cez Tailscale bezime v jednoduchom CasaOS rezime: jedna spolocna zaloha historie v PocketBase bez prihlasovania. Google doplnime po nastaveni HTTPS domeny.
 
 Lokálne overenie buildu:
 

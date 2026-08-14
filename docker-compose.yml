@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        EXPO_PUBLIC_CLOUD_AUTH: "pocketbase"
+        EXPO_PUBLIC_CLOUD_AUTH: "pocketbase-single"
         EXPO_PUBLIC_POCKETBASE_URL: "/pb"
     image: gym80-tracker:zimaboard
     container_name: gym80-tracker

@@ -21,7 +21,7 @@ export type CloudDataSnapshot = {
 };
 
 type AuthModule = typeof import("@netlify/identity");
-type CloudAuthMode = "off" | "netlify" | "pocketbase";
+type CloudAuthMode = "off" | "netlify" | "pocketbase" | "pocketbase-single";
 type CloudAuthSubscription = {
   onAuthChange: (
     callback: (_event: string, nextUser: CloudUser | null) => void
@@ -32,17 +32,24 @@ let authModulePromise: Promise<AuthModule> | null = null;
 const POCKETBASE_TOKEN_KEY = "gym80-pocketbase-token";
 const POCKETBASE_USER_KEY = "gym80-pocketbase-user";
 const POCKETBASE_DATA_COLLECTION = "user_data";
+const POCKETBASE_SINGLE_DATA_COLLECTION = "single_app_data";
+const POCKETBASE_SINGLE_DATA_KEY = "gym80-main";
 
 declare const process:
   | {
-      env?: Record<string, string | undefined>;
-    }
-  | undefined;
+      env: {
+        EXPO_PUBLIC_CLOUD_AUTH?: string;
+        EXPO_PUBLIC_POCKETBASE_URL?: string;
+      };
+    };
+
+const configuredCloudAuthMode = process.env.EXPO_PUBLIC_CLOUD_AUTH;
+const configuredPocketBaseUrl = process.env.EXPO_PUBLIC_POCKETBASE_URL;
 
 function getCloudAuthMode(): CloudAuthMode {
-  const mode = process?.env?.EXPO_PUBLIC_CLOUD_AUTH;
+  const mode = configuredCloudAuthMode;
 
-  if (mode === "netlify" || mode === "pocketbase") {
+  if (mode === "netlify" || mode === "pocketbase" || mode === "pocketbase-single") {
     return mode;
   }
 
@@ -56,6 +63,10 @@ export function getCloudLoginProviderLabel() {
     return "ZimaBoard ucet";
   }
 
+  if (mode === "pocketbase-single") {
+    return "CasaOS zaloha";
+  }
+
   if (mode === "netlify") {
     return "Google";
   }
@@ -64,11 +75,16 @@ export function getCloudLoginProviderLabel() {
 }
 
 export function isPocketBaseCloudEnabled() {
-  return getCloudAuthMode() === "pocketbase";
+  const mode = getCloudAuthMode();
+  return mode === "pocketbase" || mode === "pocketbase-single";
+}
+
+export function isSingleUserPocketBaseCloudEnabled() {
+  return getCloudAuthMode() === "pocketbase-single";
 }
 
 function getPocketBaseBaseUrl() {
-  return process?.env?.EXPO_PUBLIC_POCKETBASE_URL || "/pb";
+  return configuredPocketBaseUrl || "/pb";
 }
 
 function canUseNetlifyIdentity() {
@@ -83,7 +99,7 @@ function canUsePocketBase() {
   return (
     Platform.OS === "web" &&
     typeof window !== "undefined" &&
-    getCloudAuthMode() === "pocketbase"
+    isPocketBaseCloudEnabled()
   );
 }
 
@@ -104,11 +120,20 @@ export function isProductionWebHost() {
     return false;
   }
 
-  return getCloudAuthMode() !== "off";
+  const mode = getCloudAuthMode();
+  return mode === "netlify" || mode === "pocketbase";
 }
 
 export async function initializeCloudAuth() {
   if (canUsePocketBase()) {
+    if (isSingleUserPocketBaseCloudEnabled()) {
+      return {
+        onAuthChange() {
+          return () => undefined;
+        }
+      } satisfies CloudAuthSubscription;
+    }
+
     return {
       onAuthChange(callback) {
         const listener = () => {
@@ -138,6 +163,14 @@ export async function initializeCloudAuth() {
 
 export async function getCloudUser() {
   if (canUsePocketBase()) {
+    if (isSingleUserPocketBaseCloudEnabled()) {
+      return {
+        id: POCKETBASE_SINGLE_DATA_KEY,
+        email: "CasaOS lokalna zaloha",
+        name: "CasaOS"
+      };
+    }
+
     const token = getStoredPocketBaseToken();
 
     if (!token) {
@@ -186,6 +219,11 @@ export async function loginWithGoogle() {
 
 export async function logoutCloudUser() {
   if (canUsePocketBase()) {
+    if (isSingleUserPocketBaseCloudEnabled()) {
+      clearPocketBaseAuth();
+      return;
+    }
+
     clearPocketBaseAuth();
     notifyPocketBaseAuthChange();
     return;
@@ -202,6 +240,11 @@ export async function logoutCloudUser() {
 
 export async function fetchCloudData() {
   if (canUsePocketBase()) {
+    if (isSingleUserPocketBaseCloudEnabled()) {
+      const existing = await findPocketBaseSingleDataRecord();
+      return existing?.data as CloudDataSnapshot | null;
+    }
+
     const user = getStoredPocketBaseUser();
     const token = getStoredPocketBaseToken();
 
@@ -232,6 +275,39 @@ export async function fetchCloudData() {
 
 export async function saveCloudData(snapshot: CloudDataSnapshot) {
   if (canUsePocketBase()) {
+    if (isSingleUserPocketBaseCloudEnabled()) {
+      const existing = await findPocketBaseSingleDataRecord();
+      const payload = {
+        key: POCKETBASE_SINGLE_DATA_KEY,
+        data: snapshot
+      };
+
+      const response = existing
+        ? await pocketBaseFetch(
+            `/api/collections/${POCKETBASE_SINGLE_DATA_COLLECTION}/records/${existing.id}`,
+            {
+              method: "PATCH",
+              headers: {
+                "content-type": "application/json"
+              },
+              body: JSON.stringify(payload)
+            }
+          )
+        : await pocketBaseFetch(
+            `/api/collections/${POCKETBASE_SINGLE_DATA_COLLECTION}/records`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json"
+              },
+              body: JSON.stringify(payload)
+            }
+          );
+
+      const body = await response.json();
+      return { ok: true as const, updatedAt: body.updated || snapshot.updatedAt };
+    }
+
     const user = getStoredPocketBaseUser();
     const token = getStoredPocketBaseToken();
 
@@ -377,6 +453,18 @@ async function findPocketBaseUserDataRecord(userId: string, token: string) {
         authorization: `Bearer ${token}`
       }
     }
+  );
+  const body = (await response.json()) as {
+    items?: Array<{ id: string; data?: unknown }>;
+  };
+
+  return body.items?.[0] ?? null;
+}
+
+async function findPocketBaseSingleDataRecord() {
+  const filter = encodeURIComponent(`key="${POCKETBASE_SINGLE_DATA_KEY}"`);
+  const response = await pocketBaseFetch(
+    `/api/collections/${POCKETBASE_SINGLE_DATA_COLLECTION}/records?filter=${filter}&perPage=1`
   );
   const body = (await response.json()) as {
     items?: Array<{ id: string; data?: unknown }>;
