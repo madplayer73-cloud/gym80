@@ -10,14 +10,5 @@ services:
     restart: unless-stopped
     ports:
       - "8088:80"
-    depends_on:
-      - gym80-sync
-
-  gym80-sync:
-    image: node:22-alpine
-    container_name: gym80-sync
-    restart: unless-stopped
-    command: node /app/sync-server.js
     volumes:
-      - ./server:/app:ro
       - ./zima-data/sync:/data

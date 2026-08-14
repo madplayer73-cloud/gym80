@@ -32,7 +32,7 @@ npm run start
 
 ## ZimaBoard / Portainer
 
-Self-host verzia bezi bez Netlify prihlasenia. Docker compose spusti web aj jednoduchy sync server. Cez Tailscale bezime v CasaOS rezime: jedna spolocna zaloha historie v subore `zima-data/sync/gym80.json` bez prihlasovania. Google doplnime az vtedy, ked budeme chciet verejnu HTTPS domenu a viac oddelenych pouzivatelov.
+Self-host verzia bezi bez Netlify prihlasenia. Docker compose spusti jeden kontajner, ktory zobrazuje appku aj uklada historiu. Cez Tailscale bezime v CasaOS rezime: jedna spolocna zaloha historie v subore `zima-data/sync/gym80.json` bez prihlasovania. Google doplnime az vtedy, ked budeme chciet verejnu HTTPS domenu a viac oddelenych pouzivatelov.
 
 Lokálne overenie buildu:
 
