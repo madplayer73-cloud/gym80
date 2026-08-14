@@ -1,0 +1,10 @@
+node_modules
+dist
+.expo
+.git
+.env
+.env.*
+web-build
+zima-data
+vehicle-damage-reporting-app
+npm-debug.log*

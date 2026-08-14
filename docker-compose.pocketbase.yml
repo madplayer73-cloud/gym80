@@ -1,0 +1,11 @@
+# Volitelny dalsi krok pre vlastne prihlasenie a cloud data mimo Netlify.
+# Spustaj az ked appku prepojime na PocketBase API.
+services:
+  gym80-pocketbase:
+    image: ghcr.io/muchobien/pocketbase:latest
+    container_name: gym80-pocketbase
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./zima-data/pocketbase:/pb_data

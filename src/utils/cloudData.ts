@@ -24,8 +24,22 @@ type AuthModule = typeof import("@netlify/identity");
 
 let authModulePromise: Promise<AuthModule> | null = null;
 
+declare const process:
+  | {
+      env?: Record<string, string | undefined>;
+    }
+  | undefined;
+
+function isNetlifyCloudAuthEnabled() {
+  return process?.env?.EXPO_PUBLIC_CLOUD_AUTH === "netlify";
+}
+
 function canUseNetlifyIdentity() {
-  return Platform.OS === "web" && typeof window !== "undefined";
+  return (
+    Platform.OS === "web" &&
+    typeof window !== "undefined" &&
+    isNetlifyCloudAuthEnabled()
+  );
 }
 
 async function getAuthModule() {

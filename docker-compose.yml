@@ -1,0 +1,11 @@
+services:
+  gym80-web:
+    build:
+      context: .
+      args:
+        EXPO_PUBLIC_CLOUD_AUTH: "off"
+    image: gym80-tracker:zimaboard
+    container_name: gym80-tracker
+    restart: unless-stopped
+    ports:
+      - "8088:80"
