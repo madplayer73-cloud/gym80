@@ -14,6 +14,7 @@ import {
   WorkoutFocus,
   WorkoutSession
 } from "../types";
+import { getComparableEntries } from "./progressionAdvice";
 
 type TrainerMachineMeta = {
   subgroup: string;
@@ -124,6 +125,27 @@ export type TrainerWorkoutPlan = {
   weeklyReport: WeeklyCoachReport;
   exercises: PlannedExercise[];
 };
+
+export function replacePlannedExercise(exercise: PlannedExercise, machine: Machine, sessions: WorkoutSession[]): PlannedExercise {
+  const guidance = getMachineTrainingGuidance(machine);
+  const reps = Math.max(guidance.defaultRepMin, Math.min(exercise.reps, guidance.defaultRepMax));
+  const meta = inferMachineMeta(machine);
+  return {
+    ...exercise, machine, muscleGroup: machine.muscleGroup, subgroup: meta.subgroup,
+    exerciseType: meta.exerciseType, difficulty: meta.difficulty,
+    reps, targetRepMin: guidance.defaultRepMin, targetRepMax: guidance.defaultRepMax,
+    movementPattern: meta.movementPattern, primaryMuscles: meta.primaryMuscles,
+    recommendedRestMinSec: guidance.recommendedRestMinSec, recommendedRestMaxSec: guidance.recommendedRestMaxSec,
+    estimatedTimeMinutes: Math.ceil(2 + exercise.sets * reps * 3 / 60 + Math.max(0, exercise.sets - 1) * guidance.recommendedRestMaxSec / 60),
+    warmupSets: buildWarmupSetRecommendations(machine, getLatestWorkingWeight(sessions, machine.id)),
+    alternatives: [exercise.machine, ...exercise.alternatives.filter((item) => item.id !== machine.id)],
+    selectionReason: `Nahrada za ${exercise.machine.displayNameSk}. Zachovane poradie a pocet serii; opakovania a pauzy prisposobene nahrade.`,
+    whyRest: guidance.whyRest, tempoHint: meta.tempoHint,
+    noEgoNote: undefined, restFeedback: undefined, progressType: undefined,
+    userAverageRestSec: getAverageRestForMachine(sessions, machine.id),
+    note: undefined, safetyNote: exercise.safetyNote
+  };
+}
 
 const upperGroups: MuscleGroup[] = ["Hrudnik", "Ramena", "Ruky", "Triceps", "Chrbat"];
 const lowerGroups: MuscleGroup[] = ["Nohy", "Brucho"];
@@ -299,7 +321,7 @@ function inferPrimaryMuscles(machine: Machine, subgroup: string) {
 }
 
 function inferSecondaryMuscles(machine: Machine, movementPattern: MovementPattern) {
-  if (machine.secondaryMuscles?.length) {
+  if (machine.secondaryMuscles) {
     return machine.secondaryMuscles;
   }
 
@@ -659,7 +681,7 @@ function getRecentPainCountsByJoint(
     .filter((session) => isWithinLastDays(session.workoutDate, 14))
     .forEach((session) => {
       session.entries.forEach((entry) => {
-        if (entry.feeling !== "bolest" && !entry.painLocation) {
+        if (entry.feeling !== "bolest" && (entry.painLevel ?? 0) <= 0) {
           return;
         }
 
@@ -916,7 +938,7 @@ function isWithinLastDays(dateIso: string, days: number) {
     return false;
   }
 
-  return Date.now() - time <= days * 24 * 60 * 60 * 1000;
+  return time <= Date.now() && Date.now() - time <= days * 24 * 60 * 60 * 1000;
 }
 
 function addToRecord(record: Record<string, number>, key: string, value: number) {
@@ -976,13 +998,19 @@ export function buildWeeklyTrainingState(
         }
 
         const meta = inferMachineMeta(machine);
-        const hardSets = entry.sets ?? (entry.durationMin ? 1 : 0);
+        if (meta.exerciseType === "cardio" || meta.exerciseType === "mobility") return;
+        const hardSets = entry.setLogs?.length
+          ? entry.setLogs.filter((log) => log.completed && log.setType !== "warmup").length
+          : entry.sets ?? 0;
 
         if (hardSets <= 0) {
           return;
         }
 
         meta.primaryMuscles.forEach((muscle) => addToRecord(hardSetsByMuscle, muscle, hardSets));
+        meta.secondaryMuscles.forEach((muscle) => {
+          if (!meta.primaryMuscles.includes(muscle)) addToRecord(hardSetsByMuscle, muscle, hardSets * 0.5);
+        });
         addToRecord(hardSetsByPattern, meta.movementPattern, hardSets);
         addToRecord(exposureCountPerExercise, machine.id, 1);
 
@@ -1105,11 +1133,13 @@ function chooseFocus(sessions: WorkoutSession[], machinesById: Map<string, Machi
 }
 
 function getBucketsForFocus(focus: WorkoutFocus) {
+  if (focus === "Brucho") return [{ groups: ["Brucho"] as MuscleGroup[] }];
+  if (focus === "Oddych") return [{ groups: ["Kardio"] as MuscleGroup[] }];
   if (focus === "Spodok tela") {
     return [
       { groups: ["Nohy"] as MuscleGroup[], subgroup: "predne stehna" },
-      { groups: ["Brucho"] as MuscleGroup[] },
       { groups: ["Nohy"] as MuscleGroup[], subgroup: "zadne stehna" },
+      { groups: ["Nohy"] as MuscleGroup[], subgroup: "zadok" },
       { groups: ["Nohy"] as MuscleGroup[], subgroup: "lytka" },
       { groups: ["Brucho"] as MuscleGroup[] },
       { groups: ["Nohy"] as MuscleGroup[], subgroup: "zadok" },
@@ -1119,9 +1149,10 @@ function getBucketsForFocus(focus: WorkoutFocus) {
 
   return [
     { groups: ["Hrudnik"] as MuscleGroup[] },
+    { groups: ["Chrbat"] as MuscleGroup[], subgroup: "chrbat" },
     { groups: ["Ramena"] as MuscleGroup[] },
     { groups: ["Ruky", "Triceps"] as MuscleGroup[] },
-    { groups: ["Chrbat"] as MuscleGroup[] },
+    { groups: ["Chrbat"] as MuscleGroup[], subgroup: "chrbat" },
     { groups: ["Hrudnik"] as MuscleGroup[] },
     { groups: ["Ramena"] as MuscleGroup[] },
     { groups: ["Chrbat"] as MuscleGroup[] }
@@ -1205,6 +1236,7 @@ function getCompatibilityPenalty(meta: TrainerMachineMeta, previousMeta: Trainer
 function getLatestEntryForMachine(sessions: WorkoutSession[], machineId: string) {
   return sessions
     .flatMap((session) => session.entries)
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
     .find((entry) => entry.machineId === machineId);
 }
 
@@ -1213,9 +1245,9 @@ function getLatestWorkingWeight(sessions: WorkoutSession[], machineId: string) {
 }
 
 function getPreviousEntryForMachine(sessions: WorkoutSession[], machineId: string) {
-  return sessions
-    .flatMap((session) => session.entries)
-    .filter((entry) => entry.machineId === machineId)[1];
+  const latest = getLatestEntryForMachine(sessions, machineId);
+  return latest ? getComparableEntries(sessions.flatMap((session) => session.entries), latest)
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())[1] : undefined;
 }
 
 function shouldUseWarmupSets(machine: Machine, meta: TrainerMachineMeta) {
@@ -1378,6 +1410,8 @@ function getCandidateScore(
         ? -12
         : 0;
   const recencyBonus = lastUsed.has(machine.id) ? 0 : 2;
+  const daysSince = weeklyState.daysSinceLastLoadedPattern[meta.movementPattern];
+  const recoveryPenalty = daysSince !== undefined && daysSince < 2 ? (2 - daysSince) * 6 : 0;
   const painPenalty = hasRecentPainFlag(sessions, machine.id) ? 12 : 0;
   const safetyPenalty = getSafetyPenalty({
     machine,
@@ -1391,7 +1425,8 @@ function getCandidateScore(
       : 0;
   const previousMeta = previousSelected ? inferMachineMeta(previousSelected) : null;
   const fatiguePenalty =
-    previousMeta?.fatigueCost === "high" && meta.fatigueCost === "high" ? 6 : 0;
+    (previousMeta?.fatigueCost === "high" && meta.fatigueCost === "high" ? 6 : 0) +
+    (weeklyState.axialFatigueScore >= 12 && meta.fatigueCost === "high" ? 8 : 0);
   const redundancyPenalty =
     previousMeta?.movementPattern === meta.movementPattern ? 4 : 0;
   const compatibilityPenalty = getCompatibilityPenalty(meta, previousMeta);
@@ -1403,6 +1438,7 @@ function getCandidateScore(
     profileScore +
     readinessCompatibilityScore +
     recencyBonus -
+    recoveryPenalty -
     painPenalty -
     safetyPenalty -
     kneePenalty -
@@ -1419,7 +1455,6 @@ function pickMachine({
   useCounts,
   lastUsed,
   selectedIds,
-  preferDiscovery,
   weeklyState,
   sessions,
   userExerciseProfiles,
@@ -1434,7 +1469,6 @@ function pickMachine({
   useCounts: Map<string, number>;
   lastUsed: Map<string, string>;
   selectedIds: Set<string>;
-  preferDiscovery: boolean;
   weeklyState: WeeklyTrainingState;
   sessions: WorkoutSession[];
   userExerciseProfiles?: Record<string, UserExerciseProfile>;
@@ -1443,7 +1477,12 @@ function pickMachine({
   recentPainByJoint: Record<string, number>;
   previousSelected?: Machine;
 }) {
-  let candidates = machines.filter((machine) => groups.includes(machine.muscleGroup));
+  let candidates = machines.filter((machine) => {
+    const profile = userExerciseProfiles?.[machine.id];
+    return groups.includes(machine.muscleGroup) && !selectedIds.has(machine.id) &&
+      !profile?.doNotRecommend && !(profile?.blockedUntil && new Date(profile.blockedUntil).getTime() > Date.now()) &&
+      machine.brand !== "Volne vahy" && !machine.id.startsWith("free-weights-");
+  });
 
   if (subgroup) {
     const subgroupMatches = candidates.filter(
@@ -1452,14 +1491,6 @@ function pickMachine({
 
     if (subgroupMatches.length > 0) {
       candidates = subgroupMatches;
-    }
-  }
-
-  if (preferDiscovery) {
-    const discovery = candidates.filter((machine) => (useCounts.get(machine.id) ?? 0) <= 1);
-
-    if (discovery.length > 0) {
-      candidates = discovery;
     }
   }
 
@@ -1498,18 +1529,24 @@ function getMachineBusyAlternatives({
   machine,
   machines,
   selectedIds,
-  readiness
+  readiness,
+  userExerciseProfiles
 }: {
   machine: Machine;
   machines: Machine[];
   selectedIds: Set<string>;
   readiness: ReadinessCheck;
+  userExerciseProfiles?: Record<string, UserExerciseProfile>;
 }) {
   const meta = inferMachineMeta(machine);
   const recentPainByJoint: Record<string, number> = {};
 
   return machines
-    .filter((candidate) => candidate.id !== machine.id && !selectedIds.has(candidate.id))
+    .filter((candidate) => candidate.id !== machine.id && !selectedIds.has(candidate.id) && !candidate.id.startsWith("free-weights-"))
+    .filter((candidate) => {
+      const profile = userExerciseProfiles?.[candidate.id];
+      return !profile?.doNotRecommend && !(profile?.blockedUntil && new Date(profile.blockedUntil).getTime() > Date.now());
+    })
     .map((candidate) => {
       const candidateMeta = inferMachineMeta(candidate);
       const sameMuscleScore =
@@ -1691,9 +1728,11 @@ function buildWeeklyCoachReport(
   const progressItems = [...entriesByMachine.entries()]
     .map(([machineId, entries]) => {
       const machine = machinesById.get(machineId);
+      const sortedEntries = [...entries].sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+      const comparable = sortedEntries[0] ? getComparableEntries(sortedEntries, sortedEntries[0]) : [];
       return {
         machine,
-        type: getProgressType(entries[0], entries[1])
+        type: getProgressType(comparable[0], comparable[1])
       };
     })
     .filter((item) => item.machine && item.type !== "stabilny vykon" && item.type !== "zbieram data");
@@ -1796,7 +1835,8 @@ export function generateTrainerPlan({
   cooldownMin,
   preferredFocus,
   readiness = defaultReadiness,
-  userExerciseProfiles
+  userExerciseProfiles,
+  routineMachineIds
 }: {
   sessions: WorkoutSession[];
   machines: Machine[];
@@ -1806,9 +1846,13 @@ export function generateTrainerPlan({
   preferredFocus?: WorkoutFocus;
   readiness?: ReadinessCheck;
   userExerciseProfiles?: Record<string, UserExerciseProfile>;
+  routineMachineIds?: string[];
 }): TrainerWorkoutPlan {
   const machinesById = getMachineMap(machines);
-  const focus = preferredFocus ?? chooseFocus(sessions, machinesById);
+  const routineMachines = routineMachineIds?.map((id) => machinesById.get(id)).filter(Boolean) as Machine[] | undefined;
+  const focus = routineMachines?.length
+    ? routineMachines.every((machine) => lowerGroups.includes(machine.muscleGroup)) ? "Spodok tela" : "Vrch tela"
+    : preferredFocus ?? chooseFocus(sessions, machinesById);
   const stats = analyzeTrainerHistory(sessions, machines);
   const useCounts = getMachineUseCounts(sessions);
   const lastUsed = getLastUsedMap(sessions);
@@ -1817,6 +1861,11 @@ export function generateTrainerPlan({
   const trainingLevel = getTrainingLevel(readiness);
   const trainingLevelVolumeAdjustment = getTrainingLevelVolumeAdjustment(trainingLevel);
   const recentPainByJoint = getRecentPainCountsByJoint(sessions, machinesById);
+  const lastFeedback = [...sessions].filter((session) => session.workoutFeedback && isWithinLastDays(session.feedbackAt ?? session.workoutDate, 14))
+    .sort((a, b) => new Date(b.feedbackAt ?? b.workoutDate).getTime() - new Date(a.feedbackAt ?? a.workoutDate).getTime())[0]?.workoutFeedback;
+  // Feedback adjusts volume only. Weight progression still requires clean recorded performance.
+  const feedbackVolumeAdjustment = lastFeedback === "prilis_tazky" ? -1 :
+    lastFeedback === "lahky" && readinessBand === "vysoka" && readiness.bolest === "nie" ? 1 : 0;
   const selectedIds = new Set<string>();
   const exerciseCount = getExerciseCount(
     targetDurationMinutes,
@@ -1828,11 +1877,17 @@ export function generateTrainerPlan({
   const buckets = getBucketsForFocus(focus);
   const selected: Machine[] = [];
 
-  for (let index = 0; selected.length < exerciseCount; index += 1) {
+  if (routineMachines) {
+    routineMachines.forEach((machine) => {
+      const profile = userExerciseProfiles?.[machine.id];
+      if (!selectedIds.has(machine.id) && !profile?.doNotRecommend && !(profile?.blockedUntil && new Date(profile.blockedUntil).getTime() > Date.now())) {
+        selected.push(machine); selectedIds.add(machine.id);
+      }
+    });
+  }
+
+  for (let index = 0; !routineMachines && selected.length < exerciseCount && index < buckets.length * 2; index += 1) {
     const bucket = buckets[index % buckets.length];
-    const shouldDiscover =
-      selected.length === Math.max(1, Math.floor(exerciseCount * 0.7)) ||
-      (selected.length === exerciseCount - 1 && selected.every((machine) => (useCounts.get(machine.id) ?? 0) > 1));
     const picked = pickMachine({
       machines,
       groups: bucket.groups,
@@ -1840,7 +1895,6 @@ export function generateTrainerPlan({
       useCounts,
       lastUsed,
       selectedIds,
-      preferDiscovery: shouldDiscover,
       weeklyState: stats.weeklyState,
       sessions,
       userExerciseProfiles,
@@ -1851,7 +1905,7 @@ export function generateTrainerPlan({
     });
 
     if (!picked) {
-      break;
+      continue;
     }
 
     selectedIds.add(picked.id);
@@ -1868,7 +1922,7 @@ export function generateTrainerPlan({
       2,
       (meta.exerciseType === "core" ? 3 : 4) -
         (isLowReadiness && meta.fatigueCost !== "low" ? 1 : 0) +
-        trainingLevelVolumeAdjustment
+        trainingLevelVolumeAdjustment + feedbackVolumeAdjustment
     );
     const reps = isLowReadiness
       ? Math.max(meta.defaultRepMin, Math.min(meta.defaultRepMax, meta.defaultRepMin + 1))
@@ -1900,7 +1954,7 @@ export function generateTrainerPlan({
       subgroup: meta.subgroup,
       exerciseType: meta.exerciseType,
       difficulty: meta.difficulty,
-      estimatedTimeMinutes: meta.estimatedTimeMinutes,
+      estimatedTimeMinutes: Math.ceil(2 + sets * reps * 3 / 60 + Math.max(0, sets - 1) * meta.recommendedRestMaxSec / 60),
       sets,
       reps,
       recommendedRestMinSec: meta.recommendedRestMinSec,
@@ -1950,7 +2004,8 @@ export function generateTrainerPlan({
         machine,
         machines,
         selectedIds,
-        readiness
+        readiness,
+        userExerciseProfiles
       })
     };
   });
@@ -1963,7 +2018,9 @@ export function generateTrainerPlan({
     targetDurationMinutes,
     estimatedDurationMinutes,
     goal: "rast svalov",
-    strategy: buildStrategy(focus, exercises.some((exercise) => exercise.isDiscovery)),
+    strategy: (routineMachines ? "Tvoj vlastny rozpis: zachovane stroje a poradie; zakazane alebo docasne blokovane cviky vynechane." : buildStrategy(focus, exercises.some((exercise) => exercise.isDiscovery))) +
+      (feedbackVolumeAdjustment < 0 ? ". Minule to bolo prilis tazke: dnes o seriu menej na cvik." :
+        feedbackVolumeAdjustment > 0 ? ". Minule to bolo lahke a dnes mas vysoku pripravenost: o seriu viac, bez automatickeho zvysovania vahy." : ""),
     focus,
     stats,
     readinessBand,

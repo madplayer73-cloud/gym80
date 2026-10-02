@@ -1,6 +1,7 @@
 import { Machine, WorkoutSession } from "../types";
+import { withTrainingMetadata } from "./trainingMetadata";
 
-export const mockMachines: Machine[] = [
+const machineCatalog: Machine[] = [
   {
     id: "leg-extension-seated",
     brand: "Gym80",
@@ -651,6 +652,7 @@ export const mockMachines: Machine[] = [
     imageAssets: [
       "4134_kladky-na-cele-telo_2.jpg"
     ],
+    accessoryIds: ["2110", "2112", "2121", "2127", "2132", "2142", "2147"],
     videoUrl: "https://youtu.be/tMUOrcSH4Jw?si=r7hTi-ERHT0YNJPV",
     setupNoteLabel: "Seat height"
   },
@@ -668,6 +670,7 @@ export const mockMachines: Machine[] = [
     imageAssets: [
       "4012_kladkova-veza_2.jpg"
     ],
+    accessoryIds: ["2110", "2112", "2121", "2127", "2132", "2142", "2147"],
     videoUrl: "https://youtu.be/nKhFU68Fcjc?si=a5vXHRuHC0HJbuTd",
     setupNoteLabel: "Seat height"
   },
@@ -685,6 +688,7 @@ export const mockMachines: Machine[] = [
     imageAssets: [
       "4016_pritah-na-chrbat-v-sede-kladka_1.webp"
     ],
+    accessoryIds: ["2121", "2127", "2142"],
     videoUrl: "https://youtu.be/MxIGOHJ8gHQ?si=zXAfK1CLI3c-TGP5",
     setupNoteLabel: "Seat height"
   },
@@ -699,6 +703,7 @@ export const mockMachines: Machine[] = [
     descriptionSk:
       "Stroj na stahovanie tyce zhora k hrudniku v sede. Precvicuje hlavne siroky chrbtovy sval, stred chrbta a bicepsy.",
     imageAsset: "4116_stahovanie-hornej-kladky_1.webp",
+    accessoryIds: ["2110", "2121", "2142"],
     videoUrl: "https://youtu.be/MmbKY6FLkLM?si=MslrmbYSoWsxpgjP",
     setupNoteLabel: "Seat height"
   },
@@ -1114,4 +1119,5 @@ export const mockMachines: Machine[] = [
   }
 ];
 
+export const mockMachines = machineCatalog.map(withTrainingMetadata);
 export const mockWorkoutSessions: WorkoutSession[] = [];

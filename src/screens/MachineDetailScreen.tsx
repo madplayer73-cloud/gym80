@@ -1,4 +1,7 @@
 import React from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MachineSetupCard } from "../components/MachineSetupCard";
+import { parseMachineDrafts } from "../utils/machineDraft";
 import {
   Image,
   Linking,
@@ -13,9 +16,14 @@ import {
 import { SectionCard } from "../components/SectionCard";
 import { StatChip } from "../components/StatChip";
 import { Tag } from "../components/Tag";
+import { getMachineAccessories } from "../data/machineAccessories";
+import { getRememberedAccessory } from "../utils/exerciseMemory";
 import { AppColors, useTheme } from "../theme";
 import {
   Machine,
+  MachineSetup,
+  MachineDraft,
+  MachineAccessoryId,
   MachineExerciseVariant,
   ReadinessPain,
   TechniqueQuality,
@@ -35,9 +43,11 @@ import {
   getEntryProgressionAdvice,
   getPlannedProgressionAdvice,
   getTrendProgressionAdvice,
+  suggestWorkingWeight,
+  getWorkingWeightReason,
   ProgressionAdviceLevel
 } from "../utils/progressionAdvice";
-import { getMachineTrainingGuidance } from "../utils/trainerPlanner";
+import { getMachineTrainingGuidance, PlannedExercise } from "../utils/trainerPlanner";
 
 type MachineDetailEntry = WorkoutEntry & {
   workoutDate: string;
@@ -46,7 +56,9 @@ type MachineDetailEntry = WorkoutEntry & {
 };
 
 type MachineDetailScreenProps = {
+  onSaveMachineSetup: (setup: MachineSetup) => void;
   machine: Machine;
+  plannedExercise?: PlannedExercise;
   entries: MachineDetailEntry[];
   onBack: () => void;
   onBackToPlan?: () => void;
@@ -54,6 +66,8 @@ type MachineDetailScreenProps = {
     machineId: string;
     exerciseVariantId?: string;
     exerciseVariantNameSk?: string;
+    accessoryId?: MachineAccessoryId;
+    accessoryNameSk?: string;
     weightKg?: number;
     sets?: number;
     reps?: number;
@@ -108,41 +122,6 @@ function getWarmupWeight(workingWeightKg: number | undefined, percent: number | 
   }
 
   return roundTrainingWeight(workingWeightKg * (percent / 100));
-}
-
-function getSuggestedWorkingWeight(
-  latestEntry: WorkoutEntry | undefined,
-  guidance: ReturnType<typeof getMachineTrainingGuidance>
-) {
-  const latestWeight = latestEntry?.weightKg ?? 0;
-
-  if (!latestWeight) {
-    return undefined;
-  }
-
-  const painLevel = latestEntry?.painLevel ?? (latestEntry?.feeling === "bolest" ? 5 : 0);
-  const rpe =
-    latestEntry?.rpe ??
-    (latestEntry?.feeling === "tazke" ? 9.5 : latestEntry?.feeling === "bolest" ? 10 : 8);
-  const reps = latestEntry?.reps ?? 0;
-  const sets = latestEntry?.sets ?? 0;
-  const techniqueQuality = latestEntry?.techniqueQuality ?? "cista";
-
-  if (painLevel >= 3 || rpe >= 9.5 || techniqueQuality === "zla") {
-    return Math.max(0, roundTrainingWeight(latestWeight - guidance.microloadStepKg));
-  }
-
-  if (
-    sets >= 3 &&
-    reps >= guidance.defaultRepMax &&
-    rpe <= 8.5 &&
-    painLevel === 0 &&
-    latestEntry?.feeling !== "tazke"
-  ) {
-    return roundTrainingWeight(latestWeight + guidance.microloadStepKg);
-  }
-
-  return latestWeight;
 }
 
 function createSetLog({
@@ -312,8 +291,36 @@ function getVariantLoadHint(variant: MachineExerciseVariant | undefined) {
   return "Tento variant ma vlastnu vahu alebo odpor, preto ho ukladame oddelene.";
 }
 
-export function MachineDetailScreen({
+const draftWrites = new Map<string, Promise<unknown>>();
+function writeDrafts(key: string, drafts: Record<string, MachineDraft>) {
+  const raw = JSON.stringify(drafts);
+  const next = (draftWrites.get(key) ?? Promise.resolve()).catch(() => {}).then(() => AsyncStorage.setItem(key, raw));
+  draftWrites.set(key, next);
+  return next;
+}
+export function MachineDetailScreen(props: MachineDetailScreenProps) {
+  const [drafts, setDrafts] = React.useState<Record<string, MachineDraft> | null>(null);
+  const [loadError, setLoadError] = React.useState(false);
+  const key = `gym80-machine-draft-v1-${props.machine.id}`;
+  const { colors } = useTheme();
+  React.useEffect(() => {
+    let cancelled = false;
+    void (draftWrites.get(key) ?? Promise.resolve()).catch(() => {}).then(() => AsyncStorage.getItem(key)).then((raw) => {
+      const parsed = parseMachineDrafts(raw);
+      if (!cancelled) setDrafts(parsed);
+    }).catch(() => { if (!cancelled) setLoadError(true); });
+    return () => { cancelled = true; };
+  }, [key]);
+  if (loadError) return <View style={{ padding: 20 }}><Text style={{ color: colors.text }}>Rozpracovany zapis sa nepodarilo nacitat. Nechavam ho ulozeny. Skus znovu otvorit stroj.</Text><Pressable onPress={props.onBack}><Text style={{ color: colors.highlight, padding: 16 }}>Spat</Text></Pressable></View>;
+  if (!drafts) return <Text style={{ color: colors.text, padding: 20 }}>Nacitavam zapis…</Text>;
+  return <MachineDetailForm {...props} initialDrafts={drafts} storageKey={key} />;
+}
+function MachineDetailForm({
+  initialDrafts,
+  storageKey,
+  onSaveMachineSetup,
   machine,
+  plannedExercise,
   entries,
   userExerciseProfile,
   isFavorite,
@@ -321,17 +328,23 @@ export function MachineDetailScreen({
   onBackToPlan,
   onSaveEntry,
   onToggleFavorite
-}: MachineDetailScreenProps) {
+}: MachineDetailScreenProps & { initialDrafts: Record<string, MachineDraft>; storageKey: string }) {
   const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const isCardio = machine.muscleGroup === "Kardio";
+  const draftsRef = React.useRef(initialDrafts);
+  const newestDraft = Object.values(initialDrafts).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const [selectedAccessoryId, setSelectedAccessoryId] = React.useState<MachineAccessoryId | null>(() =>
+    newestDraft ? newestDraft.accessoryId : getRememberedAccessory(machine, entries));
   const [selectedVariantId, setSelectedVariantId] = React.useState<string | null>(() =>
-    getDefaultVariantId(machine)
+    newestDraft?.variantId ?? getDefaultVariantId(machine)
   );
 
-  React.useEffect(() => {
-    setSelectedVariantId(getDefaultVariantId(machine));
-  }, [machine.id]);
+  const draftKey = JSON.stringify([selectedVariantId, selectedAccessoryId]);
+  const [initializedKey, setInitializedKey] = React.useState<string | null>(null);
+  const baselineRef = React.useRef<string | null>(null);
+  const savedRef = React.useRef(false);
+  const [draftMessage, setDraftMessage] = React.useState("");
 
   const selectedVariant = React.useMemo(
     () =>
@@ -340,17 +353,18 @@ export function MachineDetailScreen({
     [machine.exerciseVariants, selectedVariantId]
   );
   const entriesForSelectedVariant = React.useMemo(() => {
+    const accessoryEntries = entries.filter((entry) => (entry.accessoryId ?? null) === selectedAccessoryId);
     if (!selectedVariant) {
-      return entries;
+      return accessoryEntries;
     }
 
     const defaultVariantId = getDefaultVariantId(machine);
-    return entries.filter(
+    return accessoryEntries.filter(
       (entry) =>
         entry.exerciseVariantId === selectedVariant.id ||
         (!entry.exerciseVariantId && selectedVariant.id === defaultVariantId)
     );
-  }, [entries, machine, selectedVariant]);
+  }, [entries, machine, selectedVariant, selectedAccessoryId]);
   const latestEntry = entriesForSelectedVariant[0];
   const isBodyweightVariant = selectedVariant?.loadType === "bodyweight";
   const tracksWeight = !isCardio && !isBodyweightVariant;
@@ -362,6 +376,10 @@ export function MachineDetailScreen({
     [machine]
   );
   const machineImage = machineImages[0] ?? null;
+  const accessories = React.useMemo(
+    () => getMachineAccessories(machine.accessoryIds),
+    [machine.accessoryIds]
+  );
   const weightEntries = tracksWeight
     ? entriesForSelectedVariant.filter((entry) => typeof entry.weightKg === "number")
     : [];
@@ -413,6 +431,9 @@ export function MachineDetailScreen({
 
   const [isImageOpen, setIsImageOpen] = React.useState(false);
   const [isRestWhyOpen, setIsRestWhyOpen] = React.useState(false);
+  const [isRestSectionOpen, setIsRestSectionOpen] = React.useState(false);
+  const [isLastPerformanceOpen, setIsLastPerformanceOpen] = React.useState(false);
+  const [isTodayPerformanceOpen, setIsTodayPerformanceOpen] = React.useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = React.useState(0);
   const [weightKg, setWeightKg] = React.useState("");
   const [sets, setSets] = React.useState("4");
@@ -430,15 +451,20 @@ export function MachineDetailScreen({
   const [collapsedSetIds, setCollapsedSetIds] = React.useState<Record<string, boolean>>({});
   const [isWarmupConfirmed, setIsWarmupConfirmed] = React.useState(false);
   const [isWarmupDismissed, setIsWarmupDismissed] = React.useState(false);
+  const [isWarmupSuggestionOpen, setIsWarmupSuggestionOpen] = React.useState(false);
   const [activeRestTimer, setActiveRestTimer] = React.useState<{
     setNumber: number;
     remainingSec: number;
   } | null>(null);
   const [note, setNote] = React.useState("");
   const lastCountdownBeepRef = React.useRef<number | null>(null);
+  const lastWarmupSuggestionPressAtRef = React.useRef(0);
   const selectedMachineImage = machineImages[selectedImageIndex] ?? machineImage;
+  const selectedAccessory = accessories.find(
+    (accessory) => accessory.id === selectedAccessoryId
+  );
   const latestProgressionAdvice = !isCardio
-    ? getTrendProgressionAdvice(entries, machine) ?? getEntryProgressionAdvice(latestEntry)
+    ? getTrendProgressionAdvice(entriesForSelectedVariant, machine) ?? getEntryProgressionAdvice(latestEntry)
     : null;
   const plannedProgressionAdvice = !isCardio
     ? getPlannedProgressionAdvice({
@@ -453,16 +479,41 @@ export function MachineDetailScreen({
   React.useEffect(() => {
     setIsWarmupConfirmed(false);
     setIsWarmupDismissed(false);
+    setIsWarmupSuggestionOpen(false);
   }, [machine.id, latestEntry?.id, selectedVariant?.id]);
 
   React.useEffect(() => {
-    const suggestedWorkingWeight = getSuggestedWorkingWeight(latestEntry, trainingGuidance);
-    const workingSets = clampSetCount(latestEntry?.sets ?? 4);
-    const workingReps = latestEntry?.reps ?? trainingGuidance.defaultRepMax ?? 10;
+    setIsRestSectionOpen(false);
+    setIsLastPerformanceOpen(false);
+    setIsTodayPerformanceOpen(false);
+    const rememberedDraft = Object.values(draftsRef.current).filter((draft) => draft.variantId === selectedVariantId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    setSelectedAccessoryId(rememberedDraft ? rememberedDraft.accessoryId : getRememberedAccessory(machine, entries, selectedVariantId));
+  }, [machine.id, selectedVariantId]);
+
+  React.useEffect(() => {
+    baselineRef.current = null;
+    savedRef.current = false;
+    setInitializedKey(draftKey);
+    const draft = draftsRef.current[draftKey];
+    if (draft) {
+      setWeightKg(draft.weightKg); setSets(draft.sets); setReps(draft.reps);
+      setDurationMin(draft.durationMin); setSpeedKph(draft.speedKph); setInclinePercent(draft.inclinePercent);
+      setFeeling(draft.feeling); setRpe(draft.rpe); setPainLevel(draft.painLevel); setPainLocation(draft.painLocation);
+      setTechniqueQuality(draft.techniqueQuality); setRestSeconds(draft.restSeconds); setSetLogs(draft.setLogs); setNote(draft.note);
+      setDraftMessage("Rozpracovany zapis obnoveny. Zatial nie je v historii.");
+      return;
+    }
+    setDraftMessage("");
+    const suggestedWorkingWeight = suggestWorkingWeight(entriesForSelectedVariant, machine);
+    const workingSets = clampSetCount(plannedExercise?.sets ?? latestEntry?.sets ?? 4);
+    const workingReps = plannedExercise?.reps ?? latestEntry?.reps ?? trainingGuidance.defaultRepMax ?? 10;
+    const workingRest = plannedExercise
+      ? Math.round((plannedExercise.recommendedRestMinSec + plannedExercise.recommendedRestMaxSec) / 2)
+      : latestEntry?.restSeconds ?? restTimerSeconds;
 
     setWeightKg(tracksWeight && suggestedWorkingWeight ? String(suggestedWorkingWeight) : "");
-    setSets(latestEntry?.sets ? String(latestEntry.sets) : "4");
-    setReps(latestEntry?.reps ? String(latestEntry.reps) : String(trainingGuidance.defaultRepMax ?? 10));
+    setSets(String(workingSets));
+    setReps(String(workingReps));
     setDurationMin(latestEntry?.durationMin ? String(latestEntry.durationMin) : "20");
     setSpeedKph(latestEntry?.speedKph ? String(latestEntry.speedKph) : "6");
     setInclinePercent(
@@ -476,9 +527,7 @@ export function MachineDetailScreen({
     setPainLevel(latestEntry?.painLevel ?? 0);
     setPainLocation(latestEntry?.painLocation ?? "nie");
     setTechniqueQuality(latestEntry?.techniqueQuality ?? "cista");
-    setRestSeconds(
-      latestEntry?.restSeconds ? String(latestEntry.restSeconds) : String(restTimerSeconds)
-    );
+    setRestSeconds(String(workingRest));
     const warmupLogs: TrainingSetLog[] = [];
     const existingWorkingLogs =
       latestEntry?.setLogs
@@ -489,7 +538,8 @@ export function MachineDetailScreen({
           setNumber: warmupLogs.length + index + 1,
           setType: "working" as const,
           weightKg: tracksWeight ? suggestedWorkingWeight ?? setLog.weightKg : undefined,
-          reps: setLog.reps ?? workingReps,
+          reps: workingReps,
+          restSecondsUsed: workingRest,
           techniqueQuality: setLog.techniqueQuality ?? latestEntry.techniqueQuality ?? "cista",
           completed: false
         }))
@@ -504,7 +554,7 @@ export function MachineDetailScreen({
           rpe: latestEntry?.rpe ?? 8,
           painLocation: latestEntry?.painLocation ?? "nie",
           painLevel: latestEntry?.painLevel ?? 0,
-          restSeconds: latestEntry?.restSeconds ?? restTimerSeconds,
+          restSeconds: workingRest,
           techniqueQuality: latestEntry?.techniqueQuality ?? "cista",
           setType: "working"
         })
@@ -515,7 +565,24 @@ export function MachineDetailScreen({
     ));
     setCollapsedSetIds({});
     setActiveRestTimer(null);
-  }, [latestEntry?.id, machine.id, restTimerSeconds, selectedVariant?.id, tracksWeight, trainingGuidance]);
+  }, [latestEntry?.id, machine.id, restTimerSeconds, selectedVariant?.id, selectedAccessoryId, tracksWeight, trainingGuidance, plannedExercise]);
+
+  React.useEffect(() => {
+    if (initializedKey !== draftKey || savedRef.current) return;
+    const draft = { variantId: selectedVariantId, accessoryId: selectedAccessoryId, weightKg, sets, reps, durationMin, speedKph, inclinePercent, feeling, rpe, painLevel, painLocation, techniqueQuality, restSeconds, setLogs, note };
+    const raw = JSON.stringify(draft);
+    if (baselineRef.current === null) { baselineRef.current = raw; return; }
+    if (baselineRef.current === raw) return;
+    baselineRef.current = raw;
+    draftsRef.current[draftKey] = { ...draft, updatedAt: new Date().toISOString() };
+    void writeDrafts(storageKey, draftsRef.current).then(() => setDraftMessage("Rozpracovany zapis priebezne ulozeny na tomto zariadeni."))
+      .catch(() => setDraftMessage("Zapis sa nepodarilo priebezne ulozit. Nezatvaraj ho, kym neulozis vykon."));
+  }, [initializedKey, draftKey, weightKg, sets, reps, durationMin, speedKph, inclinePercent, feeling, rpe, painLevel, painLocation, techniqueQuality, restSeconds, setLogs, note]);
+  const clearSavedDraft = () => {
+    savedRef.current = true;
+    delete draftsRef.current[draftKey];
+    void writeDrafts(storageKey, draftsRef.current).catch(() => console.log("Draft cleanup failed"));
+  };
 
   React.useEffect(() => {
     if (!activeRestTimer) {
@@ -593,7 +660,7 @@ export function MachineDetailScreen({
       return;
     }
 
-    const workingWeight = Number(weightKg) || getSuggestedWorkingWeight(latestEntry, trainingGuidance);
+    const workingWeight = Number(weightKg) || suggestWorkingWeight(entriesForSelectedVariant, machine);
     const warmupLogs = trainingGuidance.warmupSets.map((warmupSet, index) =>
       createSetLog({
         index,
@@ -712,8 +779,11 @@ export function MachineDetailScreen({
         return;
       }
 
+      clearSavedDraft();
       onSaveEntry({
         machineId: machine.id,
+        accessoryId: selectedAccessory?.id,
+        accessoryNameSk: selectedAccessory?.nameSk,
         durationMin: parsedDuration,
         speedKph: parsedSpeed,
         inclinePercent: parsedIncline,
@@ -770,10 +840,13 @@ export function MachineDetailScreen({
       return;
     }
 
+    clearSavedDraft();
     onSaveEntry({
       machineId: machine.id,
       exerciseVariantId: selectedVariant?.id,
       exerciseVariantNameSk: selectedVariant?.nameSk,
+      accessoryId: selectedAccessory?.id,
+      accessoryNameSk: selectedAccessory?.nameSk,
       weightKg: averageWeight,
       sets: parsedSets,
       reps: parsedReps,
@@ -835,6 +908,8 @@ export function MachineDetailScreen({
         </Pressable>
       </View>
 
+      {!isCardio ? <MachineSetupCard setup={userExerciseProfile?.machineSetup} lastWeight={latestEntry?.weightKg} onSave={onSaveMachineSetup} /> : null}
+      {draftMessage ? <Text accessibilityRole="alert" style={styles.subtitle}>{draftMessage}</Text> : null}
       <View style={styles.hero}>
         <Text style={styles.title}>{machine.displayNameSk}</Text>
         <Text style={styles.subtitle}>Znacka {machine.brand}</Text>
@@ -935,9 +1010,71 @@ export function MachineDetailScreen({
         ) : null}
       </View>
 
+      {accessories.length ? (
+        <SectionCard
+          title="Pomôcka ku kladke"
+          subtitle="Vyber úchop, ktorý používaš pri dnešnom výkone."
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.accessoryRow}
+          >
+            <Pressable
+              onPress={() => {
+                triggerTapHaptic();
+                setSelectedAccessoryId(null);
+              }}
+              style={[
+                styles.accessoryCard,
+                !selectedAccessoryId ? styles.accessoryCardActive : null
+              ]}
+            >
+              <View style={styles.noAccessoryImage}>
+                <Text style={styles.noAccessoryText}>Bez</Text>
+              </View>
+              <Text style={styles.accessoryCode}>Bez pomôcky</Text>
+            </Pressable>
+            {accessories.map((accessory) => {
+              const accessoryImage = getMachineImage(accessory.imageAsset);
+              const isSelected = accessory.id === selectedAccessoryId;
+
+              return (
+                <Pressable
+                  key={accessory.id}
+                  onPress={() => {
+                    triggerTapHaptic();
+                    setSelectedAccessoryId(accessory.id);
+                  }}
+                  style={[
+                    styles.accessoryCard,
+                    isSelected ? styles.accessoryCardActive : null
+                  ]}
+                >
+                  {accessoryImage ? (
+                    <Image
+                      source={accessoryImage}
+                      style={styles.accessoryImage}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+                  <Text style={styles.accessoryCode}>C. {accessory.id}</Text>
+                  <Text style={styles.accessoryName}>{accessory.nameSk}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </SectionCard>
+      ) : null}
+
       <SectionCard
         title="Odporucana prestavka"
         subtitle="Orientacne odporucanie pre rast svalov pri tomto stroji."
+        collapsed={!isRestSectionOpen}
+        onDoublePress={() => {
+          triggerTapHaptic();
+          setIsRestSectionOpen((current) => !current);
+        }}
       >
         <View style={styles.restBox}>
           <View style={styles.restGrid}>
@@ -993,6 +1130,11 @@ export function MachineDetailScreen({
       <SectionCard
         title="Posledny vykon"
         subtitle="Pri fotke stroja sa prave tento blok ukaze ako prvy."
+        collapsed={!isLastPerformanceOpen}
+        onDoublePress={() => {
+          triggerTapHaptic();
+          setIsLastPerformanceOpen((current) => !current);
+        }}
       >
         {latestEntry ? (
           <>
@@ -1029,6 +1171,9 @@ export function MachineDetailScreen({
             </View>
             {latestEntry.exerciseVariantNameSk ? (
               <Text style={styles.note}>Variant: {latestEntry.exerciseVariantNameSk}</Text>
+            ) : null}
+            {latestEntry.accessoryNameSk ? (
+              <Text style={styles.note}>Pomôcka: {latestEntry.accessoryNameSk}</Text>
             ) : null}
             <Text style={styles.dateLabel}>
               Naposledy: {new Date(latestEntry.completedAt).toLocaleString("sk-SK")}
@@ -1090,7 +1235,7 @@ export function MachineDetailScreen({
             <>
               <StatChip label="Posledny cas" value={`${latestEntry?.durationMin ?? 0} min`} />
               <StatChip label="Najrychlejsie" value={`${maxCardioSpeed} km/h`} />
-              <StatChip label="Treningy" value={String(entries.length)} />
+              <StatChip label="Treningy" value={String(entriesForSelectedVariant.length)} />
               <StatChip label="Najdlhsi cas" value={`${maxCardioDuration} min`} />
             </>
           ) : tracksWeight ? (
@@ -1138,6 +1283,11 @@ export function MachineDetailScreen({
             ? "Pri kardiu zapisuj cas, rychlost a sklon namiesto vahy."
             : "Vahu vies prevziat z posledneho treningu alebo ju hned rucne upravit."
         }
+        collapsed={!isTodayPerformanceOpen}
+        onDoublePress={() => {
+          triggerTapHaptic();
+          setIsTodayPerformanceOpen((current) => !current);
+        }}
       >
         {isCardio ? (
           <View style={styles.inlineFields}>
@@ -1171,6 +1321,7 @@ export function MachineDetailScreen({
           </View>
         ) : (
           <>
+            {tracksWeight ? <Text style={styles.adviceMeta}>{getWorkingWeightReason(entriesForSelectedVariant, machine)}</Text> : null}
             {tracksWeight && plannedProgressionAdvice ? (
               <View
                 style={[
@@ -1192,43 +1343,64 @@ export function MachineDetailScreen({
         ) : null}
             {tracksWeight && trainingGuidance.warmupSets.length && !isWarmupConfirmed && !isWarmupDismissed ? (
               <View style={styles.warmupSuggestionCard}>
-                <Text style={styles.warmupSuggestionTitle}>AI navrhuje rozcvicku</Text>
-                <Text style={styles.warmupSuggestionText}>
-                  Tento cvik alebo vaha uz patri medzi narocnejsie. Dve lahke serie pomozu
-                  prehriat klby, svaly a znizit riziko pretazenia.
-                </Text>
-                <View style={styles.warmupSuggestionList}>
-                  {trainingGuidance.warmupSets.map((warmupSet) => (
-                    <Text key={`${machine.id}-suggest-${warmupSet.percent}`} style={styles.warmupText}>
-                      {warmupSet.percent}% |{" "}
-                      {getWarmupWeight(Number(weightKg), warmupSet.percent) ??
-                        warmupSet.weightKg ??
-                        "-"}{" "}
-                      kg | {warmupSet.reps} op.
-                    </Text>
-                  ))}
-                </View>
-                <View style={styles.warmupSuggestionActions}>
-                  <Pressable
-                    onPress={() => {
-                      triggerSuccessHaptic();
-                      addSuggestedWarmupSets();
-                      setIsWarmupConfirmed(true);
-                    }}
-                    style={styles.warmupSuggestionPrimary}
-                  >
-                    <Text style={styles.warmupSuggestionPrimaryText}>Ano, pridaj rozcvicku</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
+                <Pressable
+                  accessibilityHint="Dvojitym tuknutim zobrazis alebo skryjes navrh rozcvicky"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    const now = Date.now();
+
+                    if (now - lastWarmupSuggestionPressAtRef.current <= 420) {
+                      lastWarmupSuggestionPressAtRef.current = 0;
                       triggerTapHaptic();
-                      setIsWarmupDismissed(true);
-                    }}
-                    style={styles.warmupSuggestionSecondary}
-                  >
-                    <Text style={styles.warmupSuggestionSecondaryText}>Dnes netreba</Text>
-                  </Pressable>
-                </View>
+                      setIsWarmupSuggestionOpen((current) => !current);
+                      return;
+                    }
+
+                    lastWarmupSuggestionPressAtRef.current = now;
+                  }}
+                >
+                  <Text style={styles.warmupSuggestionTitle}>AI navrhuje rozcvicku</Text>
+                </Pressable>
+                {isWarmupSuggestionOpen ? (
+                  <>
+                    <Text style={styles.warmupSuggestionText}>
+                      Tento cvik alebo vaha uz patri medzi narocnejsie. Dve lahke serie pomozu
+                      prehriat klby, svaly a znizit riziko pretazenia.
+                    </Text>
+                    <View style={styles.warmupSuggestionList}>
+                      {trainingGuidance.warmupSets.map((warmupSet) => (
+                        <Text key={`${machine.id}-suggest-${warmupSet.percent}`} style={styles.warmupText}>
+                          {warmupSet.percent}% |{" "}
+                          {getWarmupWeight(Number(weightKg), warmupSet.percent) ??
+                            warmupSet.weightKg ??
+                            "-"}{" "}
+                          kg | {warmupSet.reps} op.
+                        </Text>
+                      ))}
+                    </View>
+                    <View style={styles.warmupSuggestionActions}>
+                      <Pressable
+                        onPress={() => {
+                          triggerSuccessHaptic();
+                          addSuggestedWarmupSets();
+                          setIsWarmupConfirmed(true);
+                        }}
+                        style={styles.warmupSuggestionPrimary}
+                      >
+                        <Text style={styles.warmupSuggestionPrimaryText}>Ano, pridaj rozcvicku</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          triggerTapHaptic();
+                          setIsWarmupDismissed(true);
+                        }}
+                        style={styles.warmupSuggestionSecondary}
+                      >
+                        <Text style={styles.warmupSuggestionSecondaryText}>Dnes netreba</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                ) : null}
               </View>
             ) : null}
             {tracksWeight && trainingGuidance.warmupSets.length && isWarmupConfirmed ? (
@@ -1635,6 +1807,11 @@ export function MachineDetailScreen({
                   Variant: {entry.exerciseVariantNameSk}
                 </Text>
               ) : null}
+              {entry.accessoryNameSk ? (
+                <Text style={styles.timelineText}>
+                  Pomôcka: {entry.accessoryNameSk}
+                </Text>
+              ) : null}
               {entry.feeling ? (
                 <Text style={styles.timelineText}>
                   Pocit: {translateFeeling(entry.feeling)}
@@ -1838,6 +2015,53 @@ function createStyles(colors: AppColors) {
   galleryImage: {
     width: "100%",
     height: "100%"
+  },
+  accessoryRow: {
+    gap: 12,
+    paddingRight: 6
+  },
+  accessoryCard: {
+    width: 170,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.inputSurface,
+    padding: 10,
+    gap: 6
+  },
+  accessoryCardActive: {
+    borderColor: colors.highlight,
+    backgroundColor: colors.highlightSoft
+  },
+  accessoryImage: {
+    width: "100%",
+    height: 105,
+    borderRadius: 12,
+    backgroundColor: "#f4f4f4"
+  },
+  noAccessoryImage: {
+    width: "100%",
+    height: 105,
+    borderRadius: 12,
+    backgroundColor: colors.chipSurface,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  noAccessoryText: {
+    color: colors.textMuted,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  accessoryCode: {
+    color: colors.highlight,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  accessoryName: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700"
   },
   videoButton: {
     marginTop: 6,

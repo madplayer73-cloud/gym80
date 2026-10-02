@@ -13,6 +13,8 @@ import { Tag } from "../components/Tag";
 import { AppColors, useTheme } from "../theme";
 import {
   Machine,
+  PersonalData,
+  PersonalRoutine,
   ReadinessCheck,
   ReadinessEnergy,
   ReadinessGoal,
@@ -24,20 +26,27 @@ import {
   WorkoutFocus,
   WorkoutSession
 } from "../types";
-import { estimateSessionCalories } from "../utils/calories";
+import { estimateSessionCalories, estimateWorkoutCalories } from "../utils/calories";
+import { getBodyWeight } from "../utils/personalData";
+import { PersonalRoutinePanel } from "../components/PersonalRoutinePanel";
 import { triggerSuccessHaptic, triggerTapHaptic } from "../utils/haptics";
 import {
   defaultReadiness,
   generateTrainerPlan,
-  PlannedExercise
+  replacePlannedExercise,
+  PlannedExercise,
+  TrainerWorkoutPlan
 } from "../utils/trainerPlanner";
+import { WorkoutClock } from "../utils/workoutClock";
 import { buildDailySuggestion } from "../utils/trainingPlan";
 
 type HomeScreenProps = {
   machines: Machine[];
+  personalData: PersonalData;
+  onSaveRoutine: (routine: PersonalRoutine) => void;
   sessions: WorkoutSession[];
   userExerciseProfiles: Record<string, UserExerciseProfile>;
-  onOpenMachine: (machine: Machine) => void;
+  onOpenMachine: (machine: Machine, plannedExercise?: PlannedExercise) => void;
   trainerSettings: TrainerSessionSettings;
   onChangeTrainerSettings: (settings: TrainerSessionSettings) => void;
   onCompleteRoutine: (input: {
@@ -55,6 +64,10 @@ export type TrainerSessionSettings = {
   activeFocus: WorkoutFocus | null;
   readiness: ReadinessCheck;
   hasStarted: boolean;
+  activePlan?: TrainerWorkoutPlan;
+  activePlanDate?: string;
+  clock?: WorkoutClock;
+  selectedRoutineId?: "A" | "B";
 };
 
 const durationOptions = [60, 90, 120];
@@ -134,6 +147,8 @@ function translateTrainingLevel(level: UserTrainingLevel | undefined) {
 
 export function HomeScreen({
   machines,
+  personalData,
+  onSaveRoutine,
   sessions,
   userExerciseProfiles,
   onOpenMachine,
@@ -155,7 +170,8 @@ export function HomeScreen({
   const updateTrainerSettings = (nextSettings: Partial<TrainerSessionSettings>) => {
     onChangeTrainerSettings({
       ...trainerSettings,
-      ...nextSettings
+      ...nextSettings,
+      ...(nextSettings.hasStarted === false ? { activePlan: undefined, activePlanDate: undefined } : {})
     });
   };
   const updateReadiness = (nextReadiness: Partial<ReadinessCheck>) => {
@@ -168,7 +184,10 @@ export function HomeScreen({
       hasStarted: false
     });
   };
-  const preferredFocus = hasStarted && activeFocus ? activeFocus : manualFocus ?? undefined;
+  const selectedRoutine = personalData.routines.find((routine) => routine.id === trainerSettings.selectedRoutineId);
+  const routineMachines = selectedRoutine?.machineIds.map((id) => machines.find((machine) => machine.id === id)).filter(Boolean);
+  const routineFocus: WorkoutFocus | undefined = routineMachines?.length ? routineMachines.every((machine) => machine?.muscleGroup === "Nohy" || machine?.muscleGroup === "Brucho") ? "Spodok tela" : "Vrch tela" : undefined;
+  const preferredFocus = hasStarted && activeFocus ? activeFocus : routineFocus ?? manualFocus ?? undefined;
   const suggestion = buildDailySuggestion(
     sessions,
     machines,
@@ -177,7 +196,7 @@ export function HomeScreen({
     cooldownMin,
     preferredFocus
   );
-  const trainerPlan = generateTrainerPlan({
+  const generatedPlan = generateTrainerPlan({
     sessions,
     machines,
     targetDurationMinutes: durationMin,
@@ -185,8 +204,12 @@ export function HomeScreen({
     cooldownMin,
     preferredFocus: suggestion.focus,
     readiness,
-    userExerciseProfiles
+    userExerciseProfiles,
+    routineMachineIds: selectedRoutine?.machineIds
   });
+  const trainerPlan = hasStarted && trainerSettings.activePlanDate === new Date().toDateString()
+    ? { ...(trainerSettings.activePlan ?? generatedPlan), stats: generatedPlan.stats, weeklyReport: generatedPlan.weeklyReport }
+    : generatedPlan;
   const lastSession = sessions[0];
   const [expandedWhyId, setExpandedWhyId] = React.useState<string | null>(null);
   const [isSetupExpanded, setIsSetupExpanded] = React.useState(!hasStarted);
@@ -201,7 +224,7 @@ export function HomeScreen({
     [machines]
   );
   const lastSessionCalories = lastSession
-    ? estimateSessionCalories(lastSession, (machineId) => machineMap.get(machineId))
+    ? estimateSessionCalories(lastSession, (machineId) => machineMap.get(machineId), getBodyWeight(personalData, lastSession.workoutDate))
     : null;
   const todayKey = new Date().toISOString().slice(0, 10);
   const completedTodayMachineIds = React.useMemo(() => {
@@ -243,6 +266,9 @@ export function HomeScreen({
           Ciel: nabrat svaly, 3 az 4 treningy tyzdenne, s ohladom na kolena.
         </Text>
       </View>
+
+      <PersonalRoutinePanel machines={machines} routines={personalData.routines} selectedId={trainerSettings.selectedRoutineId} disabled={hasStarted}
+        onSave={onSaveRoutine} onSelect={(selectedRoutineId) => updateTrainerSettings({ selectedRoutineId, hasStarted: false, activeFocus: null })} />
 
       {!isSetupExpanded ? (
         <View style={styles.setupDock}>
@@ -455,14 +481,14 @@ export function HomeScreen({
         </>
       )}
 
-      <SectionCard title={suggestion.title} subtitle={suggestion.explanation}>
+      <SectionCard title={selectedRoutine ? `Dnes: ${selectedRoutine.name}` : suggestion.title} subtitle={selectedRoutine ? "Tvoje ulozene stroje a poradie. Zakazane alebo docasne blokovane cviky trener vynecha." : suggestion.explanation}>
         <View style={styles.row}>
           <StatChip label="Cas" value={`${suggestion.durationMin} min`} />
           <StatChip label="Rozcvicka" value={`${suggestion.warmupMin} min`} />
           <StatChip label="Plan" value={`${trainerPlan.estimatedDurationMinutes} min`} />
           <StatChip label="Cviky" value={String(trainerPlan.exercises.length)} />
           <StatChip label="Schladenie" value={`${suggestion.cooldownMin} min`} />
-          <StatChip label="Kcal" value={`~${suggestion.estimatedCalories}`} />
+          <StatChip label="Odhad kcal bez rozcvicky" value={getBodyWeight(personalData) ? `~${estimateWorkoutCalories(Math.max(0, trainerPlan.estimatedDurationMinutes - warmupMin), getBodyWeight(personalData))}` : "Zadaj hmotnost"} />
         </View>
         <View style={styles.dataPill}>
           <Text style={styles.dataPillText}>
@@ -493,6 +519,7 @@ export function HomeScreen({
             triggerTapHaptic();
             updateTrainerSettings({
               manualFocus: getNextFocus(suggestion.focus),
+              selectedRoutineId: undefined,
               activeFocus: null,
               hasStarted: false
             });
@@ -512,8 +539,10 @@ export function HomeScreen({
             setSetupSavedMessage("Startnute. Nastavenia som schoval, ideme makat.");
             setIsSetupExpanded(false);
             updateTrainerSettings({
-              activeFocus: suggestion.focus,
-              hasStarted: true
+              activeFocus: trainerPlan.focus,
+              hasStarted: true,
+              activePlan: trainerPlan,
+              activePlanDate: new Date().toDateString()
             });
           }}
           style={[styles.startWorkoutButton, hasStarted ? styles.startWorkoutButtonActive : null]}
@@ -561,9 +590,12 @@ export function HomeScreen({
 
           <SectionCard
             title="Cviky na dnes"
-            subtitle="Poradie nie je nahodne. Trener strieda zataz, partie a prida aj nieco nove."
+            subtitle={selectedRoutine ? "Tvoje vlastne poradie cvikov. Serie sa prisposobia dnesnej pripravenosti." : "Poradie nie je nahodne. Trener strieda zataz, partie a prida aj nieco nove."}
       >
         <View style={styles.machineStack}>
+          {trainerPlan.exercises.length === 0 ? (
+            <Text style={styles.strategyText}>Pre tento trening nie su dostupne vhodne stroje. Skontroluj zakazane stroje alebo zmen zameranie.</Text>
+          ) : null}
           {trainerPlan.exercises.map((exercise) => {
             const isCompleted = completedTodayMachineIds.has(exercise.machine.id);
             const isCompletedCollapsed =
@@ -654,7 +686,13 @@ export function HomeScreen({
                               key={alternative.id}
                               onPress={() => {
                                 triggerTapHaptic();
-                                onOpenMachine(alternative);
+                                const replacement = replacePlannedExercise(exercise, alternative, sessions);
+                                const activePlan = { ...trainerPlan, exercises: trainerPlan.exercises.map((item) =>
+                                  item.machine.id === exercise.machine.id ? replacement : item) };
+                                activePlan.estimatedDurationMinutes = warmupMin + cooldownMin + activePlan.exercises.reduce((sum, item) => sum + item.estimatedTimeMinutes, 0);
+                                updateTrainerSettings({ activePlan, activePlanDate: new Date().toDateString() });
+                                setBusyMachineId(null);
+                                onOpenMachine(alternative, replacement);
                               }}
                               style={styles.alternativeItem}
                             >
@@ -678,7 +716,7 @@ export function HomeScreen({
                 <Pressable
                   onPress={() => {
                     triggerTapHaptic();
-                    onOpenMachine(exercise.machine);
+                    onOpenMachine(exercise.machine, exercise);
                   }}
                   style={styles.openMachineButton}
                 >
@@ -830,7 +868,7 @@ export function HomeScreen({
                 value={new Date(lastSession.workoutDate).toLocaleDateString("sk-SK")}
               />
               <StatChip label="Fokus" value={lastSession.focus} />
-              <StatChip label="Kcal" value={`~${lastSessionCalories ?? 0}`} />
+              <StatChip label="Odhad kcal" value={lastSessionCalories === null ? "Bez hmotnosti" : `~${lastSessionCalories}`} />
             </View>
             <Text style={styles.lastSessionSummary}>{lastSession.coachSummary}</Text>
           </>

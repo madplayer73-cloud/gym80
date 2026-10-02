@@ -36,7 +36,7 @@ function getMicroloadStep(machine?: Machine) {
     return machine.microloadStepKg;
   }
 
-  if (machine?.muscleGroup === "Ruky" || machine?.muscleGroup === "Triceps" || machine?.muscleGroup === "Brucho") {
+  if (machine?.exerciseType === "isolation" || machine?.exerciseType === "core" || machine?.muscleGroup === "Ruky" || machine?.muscleGroup === "Triceps" || machine?.muscleGroup === "Brucho") {
     return 1.25;
   }
 
@@ -84,11 +84,8 @@ function getEstimatedRpe(entry: WorkoutEntry) {
 }
 
 function getPainLevel(entry: WorkoutEntry) {
-  if (typeof entry.painLevel === "number") {
-    return entry.painLevel;
-  }
-
-  return entry.feeling === "bolest" ? 5 : 0;
+  return Math.max(entry.painLevel ?? 0, entry.feeling === "bolest" ? 5 : 0,
+    ...(entry.setLogs ?? []).filter((log) => log.completed).map((log) => log.painLevel ?? 0));
 }
 
 function getConfidenceLabel(score: number) {
@@ -150,7 +147,44 @@ function withConfidence(
 }
 
 function getStrengthEntries(entries: WorkoutEntry[]) {
-  return entries.filter(hasStrengthValues).slice(0, 4);
+  return entries.filter(hasStrengthValues)
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()).slice(0, 4);
+}
+
+// Never compare different grips or exercise variants as a single progression.
+export function getComparableEntries(entries: WorkoutEntry[], context: WorkoutEntry) {
+  return entries.filter((entry) => entry.machineId === context.machineId &&
+    (entry.exerciseVariantId ?? "") === (context.exerciseVariantId ?? "") &&
+    (entry.accessoryId ?? "") === (context.accessoryId ?? ""));
+}
+
+export function suggestWorkingWeight(entries: WorkoutEntry[], machine: Machine) {
+  const latest = getStrengthEntries(entries)[0];
+  if (!latest?.weightKg) return undefined;
+  const advice = getTrendProgressionAdvice(entries, machine);
+  if (advice?.action === "swap_or_stop") return undefined;
+  // Assistance weights have inverse semantics; do not apply resistance progression.
+  const variant = machine.exerciseVariants?.find((item) => item.id === latest.exerciseVariantId) ?? machine.exerciseVariants?.[0];
+  if (variant?.loadType === "assisted") return latest.weightKg;
+  const step = getMicroloadStep(machine);
+  const weight = advice?.action === "increase" ? latest.weightKg + step
+    : advice?.level === "danger" || ["deload", "modify", "hold_or_reduce"].includes(advice?.action ?? "")
+      ? Math.max(0, latest.weightKg - step) : latest.weightKg;
+  return Math.round(weight * 10) / 10;
+}
+
+export function getWorkingWeightReason(entries: WorkoutEntry[], machine: Machine) {
+  const advice = getTrendProgressionAdvice(entries, machine);
+  const weight = suggestWorkingWeight(entries, machine);
+  if (!advice) return "Pre tento variant a pomocku este nemam zapisanu vahu. Zadaj vlastnu vychodiskovu vahu; automaticky ju neodhadujem.";
+  if (weight === undefined) return advice.message;
+  const latest = getStrengthEntries(entries)[0];
+  const variant = machine.exerciseVariants?.find((item) => item.id === latest?.exerciseVariantId) ?? machine.exerciseVariants?.[0];
+  if (variant?.loadType === "assisted") return `Dopomoc ${weight} kg ponechavam z posledneho zapisu. Menej kg tu znamena tazsi cvik; dopomoc automaticky nezvysujem ani neznizujem.`;
+  const action = advice.action === "increase" ? "Dva ciste vykony v hornej hranici pasma potvrdili maly krok hore."
+    : ["deload", "modify", "hold_or_reduce"].includes(advice.action ?? "") || advice.level === "danger"
+      ? "Posledne vykony, technika alebo bolest hovoria pre nizsiu zataz." : "Zatial potvrd rovnaku vahu; na zvysenie nemam dost podkladov.";
+  return `Odporucam ${weight} kg. ${action} Porovnavam iba rovnaky variant a pomocku. Vahu mozes rucne upravit.`;
 }
 
 export function getEntryProgressionAdvice(
@@ -295,7 +329,13 @@ export function getTrendProgressionAdvice(
   }
   const allRecentAtTop =
     lastTwo.length >= 2 &&
-    lastTwo.every((entry) => (entry.sets ?? 0) >= 3 && (entry.reps ?? 0) >= zone.max);
+    lastTwo.every((entry) => {
+      const logs = entry.setLogs?.filter((log) => log.completed && log.setType !== "warmup");
+      return (entry.sets ?? 0) >= 3 && (entry.reps ?? 0) >= zone.max &&
+        entry.techniqueQuality !== "zla" && getEstimatedRpe(entry) <= 8.5 &&
+        (!logs?.length || logs.every((log) => (log.reps ?? 0) >= zone.max &&
+          (log.painLevel ?? 0) === 0 && log.techniqueQuality !== "zla" && (log.rpe ?? 8) <= 8.5));
+    });
   const repeatedBelowZone =
     lastTwo.length >= 2 && lastTwo.every((entry) => (entry.reps ?? 0) < zone.min);
   const threeSessionRegression =
@@ -310,6 +350,12 @@ export function getTrendProgressionAdvice(
           10
       ) / 10
     : latestReps;
+
+  const variant = machine?.exerciseVariants?.find((item) => item.id === latest.exerciseVariantId) ?? machine?.exerciseVariants?.[0];
+  if (variant?.loadType === "assisted") {
+    return withConfidence({ level: "info", title: "Dopomoc nie je pracovna vaha",
+      message: "Pri tomto cviku menej kg znamena menej dopomoci a tazsi cvik. Dopomoc zatial nemenim automaticky; uprav ju podla cisteho vykonu a rezervy opakovani." }, confidenceEntries, "hold");
+  }
 
   if (threeSessionRegression || (averageRpeLastTwo >= 9.5 && repeatedBelowZone)) {
     return withConfidence({
@@ -358,7 +404,9 @@ export function getTrendProgressionAdvice(
 
   const fallback = getEntryProgressionAdvice(latest);
 
-  return fallback ? withConfidence(fallback, confidenceEntries, "hold") : fallback;
+  return fallback ? withConfidence(fallback.level === "success" ? {
+    level: "info", title: "Potvrd vykon", message: "Zopakuj cisty vykon v hornej hranici pasma aj na dalsom treningu. Potom pridame vahu."
+  } : fallback, confidenceEntries, "hold") : fallback;
 }
 
 export function getPlannedProgressionAdvice({
@@ -376,6 +424,10 @@ export function getPlannedProgressionAdvice({
 }): ProgressionAdvice | null {
   const latestAdvice = trendAdvice ?? getEntryProgressionAdvice(latestEntry);
 
+  if (latestAdvice?.action === "swap_or_stop" || latestAdvice?.level === "danger" || latestAdvice?.level === "warning") {
+    return latestAdvice;
+  }
+
   if (!latestAdvice || !plannedWeightKg || !plannedSets || !plannedReps) {
     return latestAdvice;
   }
@@ -391,20 +443,7 @@ export function getPlannedProgressionAdvice({
     };
   }
 
-  if (
-    latestAdvice.level === "danger" &&
-    plannedWeightKg >= latestWeight &&
-    latestWeight > 0
-  ) {
-    return {
-      level: "danger",
-      title: "Hoho, uber",
-      message:
-        `Minule bola tato vaha prilis tazka. Dnes zacni radsej okolo ${Math.max(0, latestWeight - 2.5)} kg a ciel 8 az 10 opakovani.`
-    };
-  }
-
-  if (plannedSets >= 4 && plannedReps >= 12 && plannedWeightKg > latestWeight) {
+  if (latestAdvice.action === "increase" && plannedSets >= 4 && plannedReps >= 12 && plannedWeightKg > latestWeight) {
     return {
       level: "success",
       title: "Dobry plan na progres",

@@ -10,12 +10,17 @@ import {
 } from "react-native";
 import { SectionCard } from "../components/SectionCard";
 import { StatChip } from "../components/StatChip";
+import { BodyMeasurementsCard } from "../components/BodyMeasurementsCard";
 import { AppColors, useTheme } from "../theme";
-import { Machine, WorkoutFeeling, WorkoutSession } from "../types";
+import { Machine, WorkoutFeeling, WorkoutSession, PersonalData, BodyMeasurement } from "../types";
+import { getBodyWeight, exerciseContextKey, getProgressSummary } from "../utils/personalData";
 import { estimateSessionCalories } from "../utils/calories";
 import { triggerTapHaptic } from "../utils/haptics";
+import { formatWorkoutTime } from "../utils/workoutClock";
 
 type HistoryScreenProps = {
+  personalData: PersonalData;
+  onSaveMeasurement: (entry: BodyMeasurement) => void;
   exportValue: string;
   sessions: WorkoutSession[];
   getMachine: (machineId: string) => Machine | undefined;
@@ -24,6 +29,8 @@ type HistoryScreenProps = {
 };
 
 export function HistoryScreen({
+  personalData,
+  onSaveMeasurement,
   exportValue,
   sessions,
   getMachine,
@@ -41,7 +48,7 @@ export function HistoryScreen({
     0
   );
   const totalCalories = sessions.reduce(
-    (sum, session) => sum + estimateSessionCalories(session, getMachine),
+    (sum, session) => sum + (estimateSessionCalories(session, getMachine, getBodyWeight(personalData, session.workoutDate)) ?? 0),
     0
   );
   const latestTrainingLabel = sessions[0]
@@ -69,44 +76,20 @@ export function HistoryScreen({
   }, {});
   const maxGroupCount = Math.max(1, ...Object.values(groupCounts));
   const groupRows = Object.entries(groupCounts).sort((a, b) => b[1] - a[1]);
-  const progressRows = usedMachineIds
-    .map((machineId) => {
-      const weightedEntries = sessions
-        .flatMap((session) => session.entries)
-        .filter((entry) => entry.machineId === machineId && typeof entry.weightKg === "number")
-        .sort(
-          (a, b) =>
-            new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime()
-        );
-
-      if (weightedEntries.length < 2) {
-        return null;
-      }
-
-      const first = weightedEntries[0].weightKg ?? 0;
-      const latest = weightedEntries[weightedEntries.length - 1].weightKg ?? 0;
-
-      return {
-        machineId,
-        name: getMachine(machineId)?.displayNameSk ?? machineId,
-        delta: latest - first
-      };
-    })
-    .filter(
-      (row): row is { machineId: string; name: string; delta: number } => row !== null
-    )
-    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-    .slice(0, 5) as Array<{ machineId: string; name: string; delta: number }>;
-  const maxProgressDelta = Math.max(
-    1,
-    ...progressRows.map((row) => Math.abs(row.delta))
-  );
+  const allEntries = sessions.flatMap((session) => session.entries);
+  const contexts = [...new Set(allEntries.map((entry) => exerciseContextKey(entry, getMachine(entry.machineId))))];
+  const progressRows = contexts.flatMap((key) => {
+    const entries = allEntries.filter((entry) => exerciseContextKey(entry, getMachine(entry.machineId)) === key);
+    const machine = getMachine(entries[0].machineId);
+    const summary = machine && machine.muscleGroup !== "Kardio" ? getProgressSummary(entries, machine) : null;
+    return summary && machine ? [{ key, name: machine.displayNameSk, ...summary }] : [];
+  });
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>Historia treningov</Text>
       <Text style={styles.subtitle}>
-        Prehlad po jednotlivych dnoch. Neskor sem vieme pridat filtre, grafy a export.
+        Prehlad treningov, porovnatelneho progresu a telesnej hmotnosti.
       </Text>
 
       <View style={styles.overviewGrid}>
@@ -119,8 +102,8 @@ export function HistoryScreen({
           <Text style={styles.overviewValue}>{totalEntries}</Text>
         </View>
         <View style={styles.overviewCard}>
-          <Text style={styles.overviewLabel}>Kcal</Text>
-          <Text style={styles.overviewValue}>~{totalCalories}</Text>
+          <Text style={styles.overviewLabel}>Odhad kcal*</Text>
+          <Text style={styles.overviewValue}>{totalCalories ? `~${totalCalories}` : "-"}</Text>
         </View>
       </View>
 
@@ -166,35 +149,22 @@ export function HistoryScreen({
         )}
         {progressRows.length > 0 ? (
           <View style={styles.progressSummary}>
-            <Text style={styles.progressSummaryTitle}>Top progres podla vahy</Text>
+            <Text style={styles.progressSummaryTitle}>Progres rovnakych cvikov a pomocok</Text>
             {progressRows.map((row) => (
-              <View key={row.machineId} style={styles.groupRow}>
+              <View key={row.key} style={styles.groupRow}>
                 <View style={styles.groupHeader}>
                   <Text style={styles.groupName}>{row.name}</Text>
-                  <Text
-                    style={[
-                      styles.groupCount,
-                      row.delta >= 0 ? styles.progressPositive : styles.progressNegative
-                    ]}
-                  >
-                    {row.delta >= 0 ? "+" : ""}
-                    {row.delta} kg
-                  </Text>
                 </View>
-                <View style={styles.groupTrack}>
-                  <View
-                    style={[
-                      styles.groupFill,
-                      row.delta < 0 ? styles.progressFillNegative : null,
-                      { width: `${Math.max(8, (Math.abs(row.delta) / maxProgressDelta) * 100)}%` }
-                    ]}
-                  />
-                </View>
+                {row.context ? <Text style={styles.groupCount}>{row.context}</Text> : null}
+                <Text style={styles.groupCount}>{row.label}</Text>
               </View>
             ))}
           </View>
         ) : null}
       </SectionCard>
+
+      <BodyMeasurementsCard measurements={personalData.measurements} onSave={onSaveMeasurement} />
+      <Text style={styles.subtitle}>*Kalorie bez rozcvicky su len hruby odhad z casu, aktivity a zadanej hmotnosti. Ak je ulozeny cas treningu, pouzijem ten; starsie zapisy maju cas odhadnuty zo serii. Sucet zahrna iba treningy so znamou hmotnostou k danemu datumu. Nejde o presne meranie.</Text>
 
       <View style={styles.backupRow}>
         <Pressable
@@ -219,7 +189,7 @@ export function HistoryScreen({
       </View>
 
       {sessions.map((session) => {
-        const calories = estimateSessionCalories(session, getMachine);
+        const calories = estimateSessionCalories(session, getMachine, getBodyWeight(personalData, session.workoutDate));
 
         return (
           <SectionCard
@@ -232,11 +202,13 @@ export function HistoryScreen({
                 <Text style={styles.focusBadgeText}>{session.focus}</Text>
               </View>
               <View style={styles.row}>
-                <StatChip label="Kcal" value={`~${calories}`} />
+                <StatChip label="Odhad kcal" value={calories === null ? "Bez hmotnosti" : `~${calories}`} />
                 <StatChip label="Cviky" value={String(session.entries.length)} />
+                {typeof session.cleanDurationSec === "number" ? <StatChip label="Bez rozcvicky" value={formatWorkoutTime(session.cleanDurationSec)} /> : null}
               </View>
             </View>
             <Text style={styles.summary}>{session.coachSummary}</Text>
+            {session.workoutFeedback ? <Text style={styles.summary}>Hodnotenie: {session.workoutFeedback === "lahky" ? "lahky" : session.workoutFeedback === "akurat" ? "akurat" : "prilis tazky"}</Text> : null}
             <View style={styles.entries}>
               {session.entries.map((entry, entryIndex) => {
                 const machine = getMachine(entry.machineId);
@@ -279,6 +251,7 @@ export function HistoryScreen({
                         </Text>
                       </View>
                       <View style={styles.entryMetaRow}>
+                        {entry.accessoryNameSk ? <Text style={styles.entryMeta}>Pomocka: {entry.accessoryNameSk}</Text> : null}
                         <View style={styles.entryPill}>
                           <Text style={styles.entryPillText}>{primaryMeta}</Text>
                         </View>

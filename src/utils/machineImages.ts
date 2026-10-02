@@ -1,6 +1,14 @@
 import { ImageSourcePropType } from "react-native";
+import { Machine } from "../types";
 
 const machineImages: Record<string, ImageSourcePropType> = {
+  "2110_lat_bar.webp": require("../../assets/machines/2110_lat_bar.webp"),
+  "2112_straight_triceps_press.webp": require("../../assets/machines/2112_straight_triceps_press.webp"),
+  "2121_paralle_handle.webp": require("../../assets/machines/2121_paralle_handle.webp"),
+  "2127_alternative_v-press.webp": require("../../assets/machines/2127_alternative_v-press.webp"),
+  "2132_triceps_rope.webp": require("../../assets/machines/2132_triceps_rope.webp"),
+  "2142_cable_station_stirrup_handle.webp": require("../../assets/machines/2142_cable_station_stirrup_handle.webp"),
+  "2147_triceps_rope_onesided.webp": require("../../assets/machines/2147_triceps_rope_onesided.webp"),
   "bezecky-pas.jpg": require("../../assets/machines/bezecky-pas.jpg"),
   "bicepsovy-zdvih-v-sede.jpg": require("../../assets/machines/bicepsovy-zdvih-v-sede.jpg"),
   "bicepsovy-zdvih-opierka-nc.webp": require("../../assets/machines/bicepsovy-zdvih-opierka-nc.webp"),
@@ -167,4 +175,23 @@ export function getMachineImage(imageAsset?: string) {
   }
 
   return machineImages[imageAsset] ?? null;
+}
+
+export function getMachineSearchCodes(
+  machine: Pick<Machine, "imageAsset" | "imageAssets">
+) {
+  const imageNames = [machine.imageAsset, ...(machine.imageAssets ?? [])].filter(
+    (imageName): imageName is string => Boolean(imageName)
+  );
+
+  return imageNames.flatMap((imageName) => {
+    const allNumberMatches = imageName.match(/\d{3,}/g) ?? [];
+    return Array.from(new Set(allNumberMatches));
+  });
+}
+
+export function getPrimaryMachineNumber(
+  machine: Pick<Machine, "imageAsset" | "imageAssets">
+) {
+  return getMachineSearchCodes(machine)[0];
 }

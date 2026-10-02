@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import { ThemeMode } from "../theme";
-import { UserExerciseProfile, WorkoutSession } from "../types";
+import { PersonalData, UserExerciseProfile, WorkoutSession } from "../types";
 
 export type CloudUser = {
   id: string;
@@ -18,6 +18,7 @@ export type CloudDataSnapshot = {
   favoriteMachineIds: string[];
   userExerciseProfiles?: Record<string, UserExerciseProfile>;
   themeMode?: ThemeMode;
+  personalData?: PersonalData;
 };
 
 type AuthModule = typeof import("@netlify/identity");

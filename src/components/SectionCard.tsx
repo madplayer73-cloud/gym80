@@ -1,22 +1,57 @@
 import React, { ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppColors, useTheme } from "../theme";
 
 type SectionCardProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  collapsed?: boolean;
+  onDoublePress?: () => void;
 };
 
-export function SectionCard({ title, subtitle, children }: SectionCardProps) {
+export function SectionCard({
+  title,
+  subtitle,
+  children,
+  collapsed = false,
+  onDoublePress
+}: SectionCardProps) {
   const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const lastPressAtRef = React.useRef(0);
+
+  const handleTitlePress = () => {
+    if (!onDoublePress) {
+      return;
+    }
+
+    const now = Date.now();
+
+    if (now - lastPressAtRef.current <= 420) {
+      lastPressAtRef.current = 0;
+      onDoublePress();
+      return;
+    }
+
+    lastPressAtRef.current = now;
+  };
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      <View style={styles.content}>{children}</View>
+      {onDoublePress ? (
+        <Pressable
+          accessibilityHint="Dvojitym tuknutim zobrazis alebo skryjes obsah"
+          accessibilityRole="button"
+          onPress={handleTitlePress}
+        >
+          <Text style={styles.title}>{title}</Text>
+        </Pressable>
+      ) : (
+        <Text style={styles.title}>{title}</Text>
+      )}
+      {!collapsed && subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {!collapsed ? <View style={styles.content}>{children}</View> : null}
     </View>
   );
 }

@@ -14,7 +14,11 @@ import { SectionCard } from "../components/SectionCard";
 import { Tag } from "../components/Tag";
 import { AppColors, useTheme } from "../theme";
 import { Machine, MuscleGroup } from "../types";
-import { getMachineImage } from "../utils/machineImages";
+import {
+  getMachineImage,
+  getMachineSearchCodes,
+  getPrimaryMachineNumber
+} from "../utils/machineImages";
 
 type MachinesScreenProps = {
   favoriteMachineIds: string[];
@@ -89,8 +93,12 @@ export function MachinesScreen({
   }, [favoriteMachineIds, machineUsageCounts, machines]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const numericQuery = normalizedQuery.replace(/\D/g, "");
+  const hasMachineNumberSearch = numericQuery.length >= 3;
   const filteredMachines = machines.filter((machine) => {
     const searchableCodes = getMachineSearchCodes(machine);
+    const matchesMachineNumber =
+      hasMachineNumberSearch && searchableCodes.some((code) => code.includes(numericQuery));
     const matchesSearch =
       normalizedQuery.length === 0 ||
       machine.displayNameSk.toLowerCase().includes(normalizedQuery) ||
@@ -98,7 +106,11 @@ export function MachinesScreen({
       machine.modelName.toLowerCase().includes(normalizedQuery) ||
       machine.id.toLowerCase().includes(normalizedQuery) ||
       machine.muscleGroup.toLowerCase().includes(normalizedQuery) ||
-      searchableCodes.some((code) => code.includes(normalizedQuery));
+      matchesMachineNumber;
+
+    if (matchesMachineNumber) {
+      return true;
+    }
 
     if (selectedFilter === "Oblubene") {
       return favoriteMachineIdSet.has(machine.id) && matchesSearch;
@@ -131,6 +143,13 @@ export function MachinesScreen({
         ) : null}
         <View style={styles.row}>
           <Tag label={machine.muscleGroup} />
+          {getPrimaryMachineNumber(machine) ? (
+            <View style={styles.machineNumberBadge}>
+              <Text style={styles.machineNumberText}>
+                C. {getPrimaryMachineNumber(machine)}
+              </Text>
+            </View>
+          ) : null}
           {isFavorite ? (
             <View style={styles.usageBadge}>
               <Text style={styles.usageBadgeText}>
@@ -230,7 +249,7 @@ export function MachinesScreen({
         })}
       </ScrollView>
 
-      {selectedFilter === "Oblubene" ? (
+      {selectedFilter === "Oblubene" && !hasMachineNumberSearch ? (
         <View style={styles.favoriteSection}>
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>Oblubene</Text>
@@ -349,6 +368,17 @@ function createStyles(colors: AppColors) {
     fontSize: 12,
     fontWeight: "900"
   },
+  machineNumberBadge: {
+    backgroundColor: colors.highlightSoft,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  machineNumberText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "900"
+  },
   machineImage: {
     width: "100%",
     height: 180,
@@ -420,17 +450,4 @@ function translateSetupLabel(label: string) {
   }
 
   return label.toLowerCase();
-}
-
-function getMachineSearchCodes(machine: Machine) {
-  const imageNames = [machine.imageAsset, ...(machine.imageAssets ?? [])].filter(
-    (imageName): imageName is string => Boolean(imageName)
-  );
-
-  return imageNames.flatMap((imageName) => {
-    const fileNameMatch = imageName.match(/^(\d{3,})/);
-    const allNumberMatches = imageName.match(/\d{3,}/g) ?? [];
-
-    return Array.from(new Set([fileNameMatch?.[1], ...allNumberMatches].filter(Boolean))) as string[];
-  });
 }

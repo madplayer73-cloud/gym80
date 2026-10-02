@@ -91,6 +91,15 @@ export type TrainingSetType = "warmup" | "working";
 
 export type MachineLoadType = "weighted" | "assisted" | "bodyweight";
 
+export type MachineAccessoryId =
+  | "2110"
+  | "2112"
+  | "2121"
+  | "2127"
+  | "2132"
+  | "2142"
+  | "2147";
+
 export type MachineExerciseVariant = {
   id: string;
   nameSk: string;
@@ -111,6 +120,7 @@ export type Machine = {
   descriptionSk: string;
   imageAsset?: string;
   imageAssets?: string[];
+  accessoryIds?: MachineAccessoryId[];
   videoUrl?: string;
   setupNoteLabel?: string;
   exerciseVariants?: MachineExerciseVariant[];
@@ -159,6 +169,8 @@ export type WorkoutEntry = {
   machineId: string;
   exerciseVariantId?: string;
   exerciseVariantNameSk?: string;
+  accessoryId?: MachineAccessoryId;
+  accessoryNameSk?: string;
   weightKg?: number;
   sets?: number;
   reps?: number;
@@ -182,6 +194,9 @@ export type WorkoutSession = {
   focus: WorkoutFocus;
   coachSummary: string;
   entries: WorkoutEntry[];
+  cleanDurationSec?: number;
+  workoutFeedback?: "lahky" | "akurat" | "prilis_tazky";
+  feedbackAt?: string;
 };
 
 export type UserExerciseProfile = {
@@ -197,4 +212,16 @@ export type UserExerciseProfile = {
   lastRestSeconds?: number;
   lastTechniqueQuality?: TechniqueQuality;
   updatedAt: string;
+  machineSetup?: MachineSetup;
+};
+
+export type MachineSetup = { seat: string; backPad: string; cable: string; other: string };
+export type BodyMeasurement = { id: string; date: string; weightKg: number; waistCm?: number };
+export type PersonalRoutine = { id: "A" | "B"; name: string; machineIds: string[] };
+export type PersonalData = { measurements: BodyMeasurement[]; routines: PersonalRoutine[] };
+export type MachineDraft = {
+  variantId: string | null; accessoryId: MachineAccessoryId | null; updatedAt: string;
+  weightKg: string; sets: string; reps: string; durationMin: string; speedKph: string; inclinePercent: string;
+  feeling: WorkoutFeeling; rpe: number; painLevel: number; painLocation: ReadinessPain;
+  techniqueQuality: TechniqueQuality; restSeconds: string; setLogs: TrainingSetLog[]; note: string;
 };

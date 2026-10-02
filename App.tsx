@@ -11,16 +11,22 @@ import {
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BottomNav } from "./src/components/BottomNav";
+import { WorkoutClockBar } from "./src/components/WorkoutClockBar";
+import { getWorkoutElapsed, transitionWorkoutClock } from "./src/utils/workoutClock";
 import { SideMenu } from "./src/components/SideMenu";
 import { CameraPrepScreen } from "./src/screens/CameraPrepScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
 import { HomeScreen, TrainerSessionSettings } from "./src/screens/HomeScreen";
+import { PlannedExercise } from "./src/utils/trainerPlanner";
 import { MachineDetailScreen } from "./src/screens/MachineDetailScreen";
+import { PersonalData } from "./src/types";
+import { emptyPersonalData, isPersonalData } from "./src/utils/personalData";
 import { MachinesListState, MachinesScreen } from "./src/screens/MachinesScreen";
 import { mockMachines } from "./src/data/mockData";
 import {
   AppTab,
   Machine,
+  MachineAccessoryId,
   MuscleGroup,
   ReadinessCheck,
   ReadinessPain,
@@ -56,6 +62,7 @@ const STORAGE_KEY = "gym80-tracker-sessions";
 const FAVORITES_STORAGE_KEY = "gym80-tracker-favorites";
 const THEME_STORAGE_KEY = "gym80-tracker-theme";
 const USER_EXERCISE_PROFILES_STORAGE_KEY = "gym80-tracker-user-exercise-profiles";
+const TRAINER_SESSION_STORAGE_KEY = "gym80-tracker-active-training-v1";
 const CLOUD_DATA_VERSION = 1;
 const WARMUP_ROUTINE_MACHINE_ID = "routine-warmup";
 const COOLDOWN_ROUTINE_MACHINE_ID = "routine-cooldown";
@@ -197,12 +204,14 @@ function buildCloudSnapshot({
   sessions,
   favoriteMachineIds,
   userExerciseProfiles,
-  themeMode
+  themeMode,
+  personalData
 }: {
   sessions: WorkoutSession[];
   favoriteMachineIds: string[];
   userExerciseProfiles: Record<string, UserExerciseProfile>;
   themeMode: ThemeMode;
+  personalData: PersonalData;
 }): CloudDataSnapshot {
   return {
     version: CLOUD_DATA_VERSION,
@@ -210,7 +219,8 @@ function buildCloudSnapshot({
     sessions,
     favoriteMachineIds,
     userExerciseProfiles,
-    themeMode
+    themeMode,
+    personalData
   };
 }
 
@@ -263,6 +273,7 @@ function AppShell() {
   const { colors, mode, setMode } = useTheme();
   const [activeTab, setActiveTab] = useState<AppTab>("home");
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
+  const [selectedPlannedExercise, setSelectedPlannedExercise] = useState<PlannedExercise | undefined>();
   const [selectedMachineSource, setSelectedMachineSource] = useState<"home" | "machines">("machines");
   const [machinesListState, setMachinesListState] = useState<MachinesListState>({
     searchQuery: "",
@@ -270,6 +281,19 @@ function AppShell() {
     scrollY: 0
   });
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
+  const [personalData, setPersonalData] = useState<PersonalData>(emptyPersonalData);
+  const [hasLoadedPersonalData, setHasLoadedPersonalData] = useState(false);
+  React.useEffect(() => {
+    void AsyncStorage.getItem("gym80-personal-data-v1").then((raw) => {
+      if (raw && isPersonalData(JSON.parse(raw))) setPersonalData(JSON.parse(raw));
+    }).catch((error) => console.log("Personal data restore failed", error))
+      .finally(() => setHasLoadedPersonalData(true));
+  }, []);
+  React.useEffect(() => {
+    if (!hasLoadedPersonalData) return;
+    void AsyncStorage.setItem("gym80-personal-data-v1", JSON.stringify(personalData))
+      .catch((error) => console.log("Personal data save failed", error));
+  }, [personalData, hasLoadedPersonalData]);
   const [favoriteMachineIds, setFavoriteMachineIds] = useState<string[]>([]);
   const [userExerciseProfiles, setUserExerciseProfiles] = useState<
     Record<string, UserExerciseProfile>
@@ -292,6 +316,48 @@ function AppShell() {
     hasStarted: false
   });
   const [hasLoadedStoredSessions, setHasLoadedStoredSessions] = useState(false);
+  const [hasLoadedTrainer, setHasLoadedTrainer] = useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(TRAINER_SESSION_STORAGE_KEY).then((raw) => {
+      if (cancelled || !raw) return;
+      const saved = JSON.parse(raw) as TrainerSessionSettings;
+      if (typeof saved.durationMin !== "number" || !saved.readiness || typeof saved.hasStarted !== "boolean") return;
+      const sameDay = saved.activePlanDate === new Date().toDateString();
+      setTrainerSettings((current) => ({ ...current, ...saved, ...(sameDay ? {} : {
+        hasStarted: false, activePlan: undefined, activePlanDate: undefined, clock: undefined
+      }) }));
+    }).catch((error) => console.log("Failed to restore training", error)).finally(() => { if (!cancelled) setHasLoadedTrainer(true); });
+    return () => { cancelled = true; };
+  }, []);
+  React.useEffect(() => {
+    if (!hasLoadedTrainer) return;
+    void AsyncStorage.setItem(TRAINER_SESSION_STORAGE_KEY, JSON.stringify(trainerSettings))
+      .catch((error) => console.log("Failed to store training", error));
+  }, [trainerSettings, hasLoadedTrainer]);
+
+  const changeTrainerSettings = (next: TrainerSessionSettings) => {
+    setTrainerSettings((current) => ({ ...next,
+      clock: next.hasStarted && (!current.clock || current.clock.phase === "finished" || current.activePlanDate !== next.activePlanDate)
+        ? { phase: "warmup", elapsedSec: 0, workoutDate: new Date().toISOString() }
+        : next.clock
+    }));
+  };
+  const startCleanTraining = () => setTrainerSettings((current) => current.clock?.phase === "warmup"
+    ? { ...current, clock: transitionWorkoutClock(current.clock, "running") } : current);
+  const finishTraining = (workoutFeedback: NonNullable<WorkoutSession["workoutFeedback"]>) => {
+    const clock = trainerSettings.clock;
+    if (!clock || clock.phase === "finished") return;
+    const feedbackAt = new Date().toISOString();
+    const target = sessions.find((session) => session.entries.some((entry) =>
+      new Date(entry.completedAt).getTime() >= new Date(clock.workoutDate).getTime()));
+    const cleanDurationSec = getWorkoutElapsed(clock);
+    setSessions((current) => current.map((session) => session.id === target?.id
+      ? { ...session, workoutFeedback, feedbackAt, cleanDurationSec: (session.cleanDurationSec ?? 0) + cleanDurationSec } : session));
+    setTrainerSettings((current) => ({ ...current, hasStarted: false, activePlan: undefined,
+      clock: current.clock ? transitionWorkoutClock(current.clock, "finished") : undefined }));
+    setToastMessage(target ? "Trening ukonceny. Cas a hodnotenie su v historii." : "Casovac ukonceny. Bez zapisanych cvikov sa historia nevytvorila.");
+  };
   const [hasLoadedStoredFavorites, setHasLoadedStoredFavorites] = useState(false);
   const [hasLoadedStoredProfiles, setHasLoadedStoredProfiles] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -347,16 +413,19 @@ function AppShell() {
           version: 1,
           exportedAt: new Date().toISOString(),
           sessions,
-          userExerciseProfiles
+          userExerciseProfiles,
+          personalData
         },
         null,
         2
       ),
-    [sessions, userExerciseProfiles]
+    [sessions, userExerciseProfiles, personalData]
   );
 
-  const openMachine = (machine: Machine, source: "home" | "machines" = "machines") => {
+  const openMachine = (machine: Machine, source: "home" | "machines" = "machines", plannedExercise?: PlannedExercise) => {
+    startCleanTraining();
     setSelectedMachine(machine);
+    setSelectedPlannedExercise(plannedExercise);
     setSelectedMachineSource(source);
     setActiveTab("machine-detail");
   };
@@ -496,6 +565,7 @@ function AppShell() {
       !hasLoadedStoredSessions ||
       !hasLoadedStoredFavorites ||
       !hasLoadedStoredProfiles ||
+      !hasLoadedPersonalData ||
       hasHydratedCloud
     ) {
       return;
@@ -532,6 +602,7 @@ function AppShell() {
           if (isUserExerciseProfiles(cloudData.userExerciseProfiles)) {
             setUserExerciseProfiles(cloudData.userExerciseProfiles);
           }
+          if (isPersonalData(cloudData.personalData)) setPersonalData(cloudData.personalData);
 
           setToastMessage("Cloud zaloha nacitana");
         } else {
@@ -540,7 +611,8 @@ function AppShell() {
               sessions,
               favoriteMachineIds,
               userExerciseProfiles,
-              themeMode: mode
+              themeMode: mode,
+              personalData
             })
           );
           setToastMessage("Cloud zaloha vytvorena");
@@ -566,6 +638,8 @@ function AppShell() {
     hasHydratedCloud,
     hasLoadedStoredFavorites,
     hasLoadedStoredProfiles,
+    hasLoadedPersonalData,
+    personalData,
     hasLoadedStoredSessions,
     mode,
     sessions,
@@ -579,7 +653,7 @@ function AppShell() {
       !hasHydratedCloud ||
       !hasLoadedStoredSessions ||
       !hasLoadedStoredFavorites ||
-      !hasLoadedStoredProfiles
+      !hasLoadedStoredProfiles || !hasLoadedPersonalData
     ) {
       return;
     }
@@ -591,7 +665,8 @@ function AppShell() {
           sessions,
           favoriteMachineIds,
           userExerciseProfiles,
-          themeMode: mode
+          themeMode: mode,
+          personalData
         })
       )
         .then(() => setCloudStatus("saved"))
@@ -608,6 +683,8 @@ function AppShell() {
     hasHydratedCloud,
     hasLoadedStoredFavorites,
     hasLoadedStoredProfiles,
+    hasLoadedPersonalData,
+    personalData,
     hasLoadedStoredSessions,
     mode,
     sessions,
@@ -684,6 +761,8 @@ function AppShell() {
     machineId,
     exerciseVariantId,
     exerciseVariantNameSk,
+    accessoryId,
+    accessoryNameSk,
     weightKg,
     sets,
     reps,
@@ -702,6 +781,8 @@ function AppShell() {
     machineId: string;
     exerciseVariantId?: string;
     exerciseVariantNameSk?: string;
+    accessoryId?: MachineAccessoryId;
+    accessoryNameSk?: string;
     weightKg?: number;
     sets?: number;
     reps?: number;
@@ -742,6 +823,8 @@ function AppShell() {
       machineId,
       exerciseVariantId,
       exerciseVariantNameSk,
+      accessoryId,
+      accessoryNameSk,
       weightKg,
       sets,
       reps,
@@ -845,6 +928,7 @@ function AppShell() {
     durationMin: number;
     note: string;
   }) => {
+    if (machineId === WARMUP_ROUTINE_MACHINE_ID) startCleanTraining();
     const now = new Date();
     const workoutDate = now.toISOString();
     const newEntry = {
@@ -968,7 +1052,8 @@ function AppShell() {
           sessions: [],
           favoriteMachineIds,
           userExerciseProfiles: {},
-          themeMode: mode
+          themeMode: mode,
+          personalData
         })
       )
         .then(() => setCloudStatus("saved"))
@@ -991,6 +1076,7 @@ function AppShell() {
       }
 
       setSessions(importedSessions);
+      if (isPersonalData(parsed?.personalData)) setPersonalData(parsed.personalData);
       if (isUserExerciseProfiles(parsed?.userExerciseProfiles)) {
         setUserExerciseProfiles(parsed.userExerciseProfiles);
       }
@@ -1069,7 +1155,8 @@ function AppShell() {
               sessions,
               favoriteMachineIds,
               userExerciseProfiles,
-              themeMode: mode
+              themeMode: mode,
+              personalData
             })
           );
       setCloudStatus("saved");
@@ -1086,13 +1173,15 @@ function AppShell() {
   if (activeTab === "home") {
     content = (
       <HomeScreen
+        personalData={personalData}
+        onSaveRoutine={(routine) => setPersonalData((current) => ({ ...current, routines: [...current.routines.filter((item) => item.id !== routine.id), routine] }))}
         machines={mockMachines}
         sessions={sessions}
         trainerSettings={trainerSettings}
         userExerciseProfiles={userExerciseProfiles}
-        onChangeTrainerSettings={setTrainerSettings}
+        onChangeTrainerSettings={changeTrainerSettings}
         onCompleteRoutine={saveRoutineEntry}
-        onOpenMachine={(machine) => openMachine(machine, "home")}
+        onOpenMachine={(machine, plannedExercise) => openMachine(machine, "home", plannedExercise)}
       />
     );
   }
@@ -1119,6 +1208,8 @@ function AppShell() {
   if (activeTab === "history") {
     content = (
       <HistoryScreen
+        personalData={personalData}
+        onSaveMeasurement={(measurement) => setPersonalData((current) => ({ ...current, measurements: [...current.measurements.filter((item) => item.date !== measurement.date), measurement] }))}
         exportValue={historyExportValue}
         sessions={sessions}
         getMachine={(machineId) => machineMap.get(machineId)}
@@ -1131,10 +1222,13 @@ function AppShell() {
   if (activeTab === "machine-detail" && selectedMachine) {
     content = (
       <MachineDetailScreen
+        key={selectedMachine.id}
+        onSaveMachineSetup={(machineSetup) => setUserExerciseProfiles((current) => ({ ...current, [selectedMachine.id]: { ...current[selectedMachine.id], machineId: selectedMachine.id, updatedAt: new Date().toISOString(), machineSetup } }))}
         entries={latestEntries.filter(
           (entry) => entry.machine?.id === selectedMachine.id
         )}
         machine={selectedMachine}
+        plannedExercise={selectedPlannedExercise}
         userExerciseProfile={userExerciseProfiles[selectedMachine.id]}
         isFavorite={favoriteMachineIds.includes(selectedMachine.id)}
         onBack={navigateBackFromMachine}
@@ -1209,9 +1303,15 @@ function AppShell() {
             <Text style={styles.headerSubtitle}>{getTabLabel(activeTab)}</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>Beta v1</Text>
+            <Text style={styles.headerBadgeText}>1.1</Text>
           </View>
         </View>
+      ) : null}
+      {trainerSettings.clock ? (
+        <WorkoutClockBar clock={trainerSettings.clock}
+          onChangePhase={(phase) => setTrainerSettings((current) => ({ ...current,
+            clock: current.clock ? transitionWorkoutClock(current.clock, phase) : undefined }))}
+          onFinish={finishTraining} />
       ) : null}
       <View style={styles.container}>{content}</View>
       {toastMessage ? (
