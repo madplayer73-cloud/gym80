@@ -214,6 +214,17 @@ test('calories require actual bodyweight and use measured workout duration', () 
   assert.equal(estimateSessionCalories(withWarmup, getMachine, 80), estimateSessionCalories(workout, getMachine, 80));
 });
 
+test('calories become available after a dated measurement without inventing past bodyweight', () => {
+  const getMachine = id => mockMachines.find(item => item.id === id);
+  const workout = { ...session([entry('1')]), workoutDate: '2026-10-11', cleanDurationSec: 3600 };
+  const measurements = { measurements: [{id:'body-2026-10-11', date:'2026-10-11', weightKg:80}], routines:[] };
+  assert.equal(estimateSessionCalories(workout, getMachine, getBodyWeight(measurements, workout.workoutDate)), 319);
+  assert.equal(estimateSessionCalories({...workout, workoutDate:'2026-10-10'}, getMachine, getBodyWeight(measurements, '2026-10-10')), null);
+  const restored = JSON.parse(JSON.stringify(measurements));
+  assert.equal(estimateSessionCalories(workout, getMachine, getBodyWeight(restored, workout.workoutDate)), 319);
+  assert.equal(estimateSessionCalories({...workout, cleanDurationSec:0}, getMachine,80), 0);
+});
+
 test('assisted and bodyweight progress describe the correct load semantics', () => {
   const assistedMachine = { ...chest, exerciseVariants: [{ id: 'assisted', nameSk: 'Dopomoc', loadType: 'assisted' }] };
   const first = entry('1', { completedAt: '2026-09-01', exerciseVariantId: 'assisted', weightKg: 40, reps: 8 });

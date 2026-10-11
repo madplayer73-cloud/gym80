@@ -43,14 +43,15 @@ export function HistoryScreen({
   const [isImportOpen, setIsImportOpen] = React.useState(false);
   const [importText, setImportText] = React.useState("");
   const [importError, setImportError] = React.useState("");
+  const [isWeightFormOpen, setIsWeightFormOpen] = React.useState(personalData.measurements.length === 0);
   const totalEntries = sessions.reduce(
     (count, session) => count + session.entries.length,
     0
   );
-  const totalCalories = sessions.reduce(
-    (sum, session) => sum + (estimateSessionCalories(session, getMachine, getBodyWeight(personalData, session.workoutDate)) ?? 0),
-    0
-  );
+  const calorieEstimates = sessions.map(session => estimateSessionCalories(session, getMachine, getBodyWeight(personalData, session.workoutDate)));
+  const knownCalorieEstimates = calorieEstimates.filter((value): value is number => value !== null);
+  const totalCalories = knownCalorieEstimates.reduce((sum, value) => sum + value, 0);
+  const missingWeightCount = calorieEstimates.length - knownCalorieEstimates.length;
   const latestTrainingLabel = sessions[0]
     ? new Date(sessions[0].workoutDate).toLocaleDateString("sk-SK")
     : "-";
@@ -103,8 +104,23 @@ export function HistoryScreen({
         </View>
         <View style={styles.overviewCard}>
           <Text style={styles.overviewLabel}>Odhad kcal*</Text>
-          <Text style={styles.overviewValue}>{totalCalories ? `~${totalCalories}` : "-"}</Text>
+          <Text style={[styles.overviewValue, !knownCalorieEstimates.length && { fontSize: 15 }]}>{knownCalorieEstimates.length ? `~${totalCalories}` : sessions.length ? "Zadaj kg" : "Bez tréningov"}</Text>
         </View>
+      </View>
+
+      <View style={{ gap: 10 }}>
+        <Text style={styles.subtitle}>
+          {!knownCalorieEstimates.length && sessions.length
+            ? "Odhad kalórií čaká na tvoju telesnú hmotnosť. Váha na stroji nie je telesná hmotnosť."
+            : missingWeightCount
+              ? `Odhad zahŕňa ${knownCalorieEstimates.length} z ${sessions.length} tréningov. Pri ${missingWeightCount} chýba hmotnosť platná k dátumu tréningu.`
+              : "Kalórie sú orientačný odhad, nie presné meranie výdaja."}
+        </Text>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: isWeightFormOpen }} onPress={() => setIsWeightFormOpen(!isWeightFormOpen)} style={styles.backupButton}>
+          <Text style={styles.backupButtonText}>{isWeightFormOpen ? "Schovať zadanie hmotnosti" : "Zadať / upraviť telesnú hmotnosť"}</Text>
+        </Pressable>
+        {isWeightFormOpen ? <BodyMeasurementsCard measurements={personalData.measurements} onSave={onSaveMeasurement} /> : null}
+        {missingWeightCount ? <Text style={styles.subtitle}>Dnešné meranie sa použije od dneška. Ak poznáš hmotnosť z minulosti, zadaj aj vtedajší dátum; dnešnú váhu spätne nevymýšľame.</Text> : null}
       </View>
 
       <View style={styles.latestCard}>
@@ -163,7 +179,6 @@ export function HistoryScreen({
         ) : null}
       </SectionCard>
 
-      <BodyMeasurementsCard measurements={personalData.measurements} onSave={onSaveMeasurement} />
       <Text style={styles.subtitle}>*Kalorie bez rozcvicky su len hruby odhad z casu, aktivity a zadanej hmotnosti. Ak je ulozeny cas treningu, pouzijem ten; starsie zapisy maju cas odhadnuty zo serii. Sucet zahrna iba treningy so znamou hmotnostou k danemu datumu. Nejde o presne meranie.</Text>
 
       <View style={styles.backupRow}>
