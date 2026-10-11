@@ -2224,6 +2224,7 @@ function createStyles(colors: AppColors) {
   },
   collapsedSetTextWrap: {
     flex: 1,
+    minWidth: 0,
     gap: 3
   },
   collapsedSetTitle: {
@@ -2237,15 +2238,15 @@ function createStyles(colors: AppColors) {
     fontWeight: "800"
   },
   setHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: "column",
+    alignItems: "stretch",
     gap: 10
   },
   setHeaderActions: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "flex-end",
+    maxWidth: "100%",
     gap: 8
   },
   setTitle: {
@@ -2268,6 +2269,10 @@ function createStyles(colors: AppColors) {
     marginBottom: 4
   },
   setTimerButton: {
+    maxWidth: "100%",
+    flexShrink: 1,
+    minHeight: 44,
+    justifyContent: "center",
     borderRadius: 999,
     backgroundColor: colors.highlight,
     paddingHorizontal: 12,
@@ -2279,6 +2284,10 @@ function createStyles(colors: AppColors) {
     fontWeight: "900"
   },
   setDoneButton: {
+    maxWidth: "100%",
+    flexShrink: 1,
+    minHeight: 44,
+    justifyContent: "center",
     borderRadius: 999,
     backgroundColor: colors.success,
     paddingHorizontal: 12,
