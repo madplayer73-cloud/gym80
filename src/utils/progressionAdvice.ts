@@ -1,4 +1,5 @@
 import { Machine, WorkoutEntry } from "../types";
+import { selectAvailableWeight } from "./availableWeights";
 
 export type ProgressionAdviceLevel = "success" | "warning" | "danger" | "info";
 
@@ -31,7 +32,10 @@ function getRepZone(machine?: Machine) {
   return { min: 8, max: 12 };
 }
 
-function getMicroloadStep(machine?: Machine) {
+function getMicroloadStep(machine?: Machine, currentWeight?: number) {
+  if (machine?.equipment === "dumbbell" && machine.availableWeightsKg?.length && currentWeight !== undefined) {
+    return Math.max(0, (selectAvailableWeight(machine.availableWeightsKg, currentWeight, "increase") ?? currentWeight) - currentWeight);
+  }
   if (machine?.microloadStepKg) {
     return machine.microloadStepKg;
   }
@@ -148,7 +152,18 @@ function withConfidence(
 
 function getStrengthEntries(entries: WorkoutEntry[]) {
   return entries.filter(hasStrengthValues)
-    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()).slice(0, 4);
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+}
+
+function getDistinctTrainingDays(entries: WorkoutEntry[]) {
+  const seen = new Set<string>();
+  return entries.filter(entry => {
+    const date = new Date(entry.completedAt);
+    if (!Number.isFinite(date.getTime())) return false;
+    const day = date.toLocaleDateString("sv-SE", {timeZone:"Europe/Bratislava"});
+    if (seen.has(day)) return false;
+    seen.add(day); return true;
+  });
 }
 
 // Never compare different grips or exercise variants as a single progression.
@@ -166,7 +181,11 @@ export function suggestWorkingWeight(entries: WorkoutEntry[], machine: Machine) 
   // Assistance weights have inverse semantics; do not apply resistance progression.
   const variant = machine.exerciseVariants?.find((item) => item.id === latest.exerciseVariantId) ?? machine.exerciseVariants?.[0];
   if (variant?.loadType === "assisted") return latest.weightKg;
-  const step = getMicroloadStep(machine);
+  const step = getMicroloadStep(machine, latest.weightKg);
+  if (machine.equipment === "dumbbell" && machine.availableWeightsKg?.length) {
+    const direction = advice?.action === "increase" ? "increase" : advice?.level === "danger" || ["deload", "modify", "hold_or_reduce"].includes(advice?.action ?? "") ? "reduce" : "hold";
+    return selectAvailableWeight(machine.availableWeightsKg, latest.weightKg, direction);
+  }
   const weight = advice?.action === "increase" ? latest.weightKg + step
     : advice?.level === "danger" || ["deload", "modify", "hold_or_reduce"].includes(advice?.action ?? "")
       ? Math.max(0, latest.weightKg - step) : latest.weightKg;
@@ -269,7 +288,8 @@ export function getTrendProgressionAdvice(
   entries: WorkoutEntry[],
   machine?: Machine
 ): ProgressionAdvice | null {
-  const strengthEntries = getStrengthEntries(entries);
+  const recentEntries = getStrengthEntries(entries);
+  const strengthEntries = getDistinctTrainingDays(recentEntries).slice(0, 4);
   const latest = strengthEntries[0];
 
   if (!latest) {
@@ -277,7 +297,9 @@ export function getTrendProgressionAdvice(
   }
 
   const confidenceEntries = strengthEntries.slice(0, 4);
-  const maxPainRecent = Math.max(...confidenceEntries.map(getPainLevel), 0);
+  // Deduplication must never hide a painful repeat recorded on the same day.
+  const recentDays = new Set(confidenceEntries.map(entry => new Date(entry.completedAt).toLocaleDateString("sv-SE", { timeZone: "Europe/Bratislava" })));
+  const maxPainRecent = Math.max(...recentEntries.filter(entry => recentDays.has(new Date(entry.completedAt).toLocaleDateString("sv-SE", { timeZone: "Europe/Bratislava" }))).map(getPainLevel), 0);
   const averageRpeLastTwo = strengthEntries.slice(0, 2).length
     ? strengthEntries.slice(0, 2).reduce((sum, entry) => sum + getEstimatedRpe(entry), 0) /
       strengthEntries.slice(0, 2).length
@@ -301,8 +323,14 @@ export function getTrendProgressionAdvice(
     }, confidenceEntries, "modify");
   }
 
+  const daysSinceLast = (Date.now() - new Date(latest.completedAt).getTime()) / 86400000;
+  if (daysSinceLast >= 14) return withConfidence({
+    level:"warning", title:"Návrat po prestávke",
+    message:`Tento cvik nemáš zapísaný ${Math.floor(daysSinceLast)} dní. Staré výkony teraz nepotvrdzujú zvýšenie váhy. Začni návratovým tréningom s nižšou záťažou a podľa dnešného výkonu ju uprav; toto je konzervatívne pravidlo aplikácie, nie meranie tvojej regenerácie.`
+  }, confidenceEntries, "deload");
+
   const zone = getRepZone(machine);
-  const step = getMicroloadStep(machine);
+  const step = getMicroloadStep(machine, latest.weightKg);
   const latestReps = latest.reps ?? 0;
   const latestSets = latest.sets ?? 0;
   const latestWeight = latest.weightKg ?? 0;
@@ -329,11 +357,12 @@ export function getTrendProgressionAdvice(
   }
   const allRecentAtTop =
     lastTwo.length >= 2 &&
+    lastTwo[0].weightKg === lastTwo[1].weightKg &&
     lastTwo.every((entry) => {
       const logs = entry.setLogs?.filter((log) => log.completed && log.setType !== "warmup");
       return (entry.sets ?? 0) >= 3 && (entry.reps ?? 0) >= zone.max &&
         entry.techniqueQuality !== "zla" && getEstimatedRpe(entry) <= 8.5 &&
-        (!logs?.length || logs.every((log) => (log.reps ?? 0) >= zone.max &&
+        (!entry.setLogs?.length || logs && logs.length >= (entry.sets ?? 0) && logs.every((log) => log.weightKg === latestWeight && (log.reps ?? 0) >= zone.max &&
           (log.painLevel ?? 0) === 0 && log.techniqueQuality !== "zla" && (log.rpe ?? 8) <= 8.5));
     });
   const repeatedBelowZone =
@@ -367,6 +396,7 @@ export function getTrendProgressionAdvice(
   }
 
   if (allRecentAtTop && latest.feeling !== "tazke" && latestRir !== 0 && averageRpeLastTwo <= 8.5) {
+    if (step === 0) return withConfidence({level:"info",title:"Najvyššia dostupná jednoručka",message:"Vyššiu dostupnú váhu nemáš nastavenú. Potvrď výkon pri rovnakej váhe; nenavrhujem neexistujúcu jednoručku."}, confidenceEntries, "hold");
     return withConfidence({
       level: "success",
       title: "Cas na maly progres",
@@ -410,12 +440,14 @@ export function getTrendProgressionAdvice(
 }
 
 export function getPlannedProgressionAdvice({
+  machine,
   latestEntry,
   trendAdvice,
   plannedWeightKg,
   plannedSets,
   plannedReps
 }: {
+  machine?: Machine;
   latestEntry?: Pick<WorkoutEntry, "weightKg" | "sets" | "reps" | "feeling" | "techniqueQuality">;
   trendAdvice?: ProgressionAdvice | null;
   plannedWeightKg?: number;
@@ -435,6 +467,7 @@ export function getPlannedProgressionAdvice({
   const latestWeight = latestEntry?.weightKg ?? 0;
 
   if (latestAdvice.level === "success" && plannedWeightKg <= latestWeight) {
+    if (machine?.equipment === "dumbbell" && machine.availableWeightsKg?.length) return latestAdvice;
     return {
       level: "warning",
       title: "Skus pridat",

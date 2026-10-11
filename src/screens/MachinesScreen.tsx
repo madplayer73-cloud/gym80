@@ -30,7 +30,7 @@ type MachinesScreenProps = {
   onOpenMachine: (machine: Machine) => void;
 };
 
-export type MachineFilter = MuscleGroup | "Vsetko" | "Oblubene";
+export type MachineFilter = MuscleGroup | "Vsetko" | "Oblubene" | "Jednorucky";
 
 export type MachinesListState = {
   searchQuery: string;
@@ -41,6 +41,7 @@ export type MachinesListState = {
 const filterOptions: Array<{ label: string; value: MachineFilter }> = [
   { label: "Vsetko", value: "Vsetko" },
   { label: "Oblubene", value: "Oblubene" },
+  { label: "Jednoručky", value: "Jednorucky" },
   { label: "Hrudnik", value: "Hrudnik" },
   { label: "Chrbat", value: "Chrbat" },
   { label: "Ramena", value: "Ramena" },
@@ -112,6 +113,7 @@ export function MachinesScreen({
       return true;
     }
 
+    if (selectedFilter === "Jednorucky") return matchesSearch && machine.equipment === "dumbbell";
     if (selectedFilter === "Oblubene") {
       return favoriteMachineIdSet.has(machine.id) && matchesSearch;
     }

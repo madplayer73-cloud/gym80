@@ -19,6 +19,7 @@ export type AppTab =
   | "home"
   | "machines"
   | "history"
+  | "progress"
   | "machine-detail"
   | "camera";
 
@@ -111,6 +112,10 @@ export type MachineExerciseVariant = {
 
 export type Machine = {
   id: string;
+  equipment?: "dumbbell";
+  availableWeightsKg?: number[];
+  referenceAssets?: string[];
+  referencePhotoTop?: number;
   brand: "Gym80" | "Volne vahy" | "Trener";
   modelName: string;
   displayNameSk: string;
@@ -218,7 +223,7 @@ export type UserExerciseProfile = {
 export type MachineSetup = { seat: string; backPad: string; cable: string; other: string };
 export type BodyMeasurement = { id: string; date: string; weightKg: number; waistCm?: number };
 export type PersonalRoutine = { id: "A" | "B"; name: string; machineIds: string[] };
-export type PersonalData = { measurements: BodyMeasurement[]; routines: PersonalRoutine[] };
+export type PersonalData = { measurements: BodyMeasurement[]; routines: PersonalRoutine[]; availableDumbbellWeightsKg?: number[] };
 export type MachineDraft = {
   variantId: string | null; accessoryId: MachineAccessoryId | null; updatedAt: string;
   weightKg: string; sets: string; reps: string; durationMin: string; speedKph: string; inclinePercent: string;

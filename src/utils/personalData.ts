@@ -5,7 +5,8 @@ export function isPersonalData(value: unknown): value is PersonalData {
   const data = value as PersonalData;
   return Boolean(data && Array.isArray(data.measurements) && Array.isArray(data.routines) &&
     data.measurements.every((item) => item && typeof item.id === "string" && typeof item.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.date) && Number.isFinite(new Date(item.date).getTime()) && Number.isFinite(item.weightKg) && item.weightKg > 0 && item.weightKg <= 500 && (item.waistCm === undefined || Number.isFinite(item.waistCm) && item.waistCm > 0 && item.waistCm <= 300)) &&
-    data.routines.every((item) => item && ["A", "B"].includes(item.id) && typeof item.name === "string" && Array.isArray(item.machineIds) && item.machineIds.every((id) => typeof id === "string")));
+    data.routines.every((item) => item && ["A", "B"].includes(item.id) && typeof item.name === "string" && Array.isArray(item.machineIds) && item.machineIds.every((id) => typeof id === "string")) &&
+    (data.availableDumbbellWeightsKg === undefined || Array.isArray(data.availableDumbbellWeightsKg) && data.availableDumbbellWeightsKg.length <= 100 && data.availableDumbbellWeightsKg.every(w => Number.isFinite(w) && w > 0 && w <= 500)));
 }
 export function getBodyWeight(data: PersonalData, date = new Date().toISOString()) {
   const calendarDate = date.length === 10 ? date : new Date(date).toLocaleDateString("sv-SE");

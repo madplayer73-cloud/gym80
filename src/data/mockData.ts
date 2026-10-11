@@ -1,5 +1,6 @@
 import { Machine, WorkoutSession } from "../types";
 import { withTrainingMetadata } from "./trainingMetadata";
+import { dumbbellExercises } from "./dumbbellExercises";
 
 const machineCatalog: Machine[] = [
   {
@@ -1119,5 +1120,5 @@ const machineCatalog: Machine[] = [
   }
 ];
 
-export const mockMachines = machineCatalog.map(withTrainingMetadata);
+export const mockMachines = [...machineCatalog, ...dumbbellExercises].map(withTrainingMetadata);
 export const mockWorkoutSessions: WorkoutSession[] = [];

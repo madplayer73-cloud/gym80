@@ -2,6 +2,18 @@ import { ImageSourcePropType } from "react-native";
 import { Machine } from "../types";
 
 const machineImages: Record<string, ImageSourcePropType> = {
+  "1000026569.jpg": require("../../assets/exercises/1000026569.jpg"),
+  "1000026570.jpg": require("../../assets/exercises/1000026570.jpg"),
+  "1000026571.jpg": require("../../assets/exercises/1000026571.jpg"),
+  "1000026572.jpg": require("../../assets/exercises/1000026572.jpg"),
+  "1000026573.jpg": require("../../assets/exercises/1000026573.jpg"),
+  "1000026574.jpg": require("../../assets/exercises/1000026574.jpg"),
+  "1000026575.jpg": require("../../assets/exercises/1000026575.jpg"),
+  "1000026576.jpg": require("../../assets/exercises/1000026576.jpg"),
+  "1000026577.jpg": require("../../assets/exercises/1000026577.jpg"),
+  "1000026578.jpg": require("../../assets/exercises/1000026578.jpg"),
+  "1000026579.jpg": require("../../assets/exercises/1000026579.jpg"),
+  "1000026580.jpg": require("../../assets/exercises/1000026580.jpg"),
   "2110_lat_bar.webp": require("../../assets/machines/2110_lat_bar.webp"),
   "2112_straight_triceps_press.webp": require("../../assets/machines/2112_straight_triceps_press.webp"),
   "2121_paralle_handle.webp": require("../../assets/machines/2121_paralle_handle.webp"),

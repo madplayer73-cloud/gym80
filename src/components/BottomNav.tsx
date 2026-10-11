@@ -12,6 +12,7 @@ type BottomNavProps = {
 const items: Array<{ label: string; tab: AppTab }> = [
   { label: "Domov", tab: "home" },
   { label: "Stroje", tab: "machines" },
+  { label: "Progres", tab: "progress" },
   { label: "Historia", tab: "history" }
 ];
 
@@ -47,10 +48,10 @@ function createStyles(colors: AppColors) {
   return StyleSheet.create({
   wrapper: {
     flexDirection: "row",
-    gap: 10,
+    gap: 5,
     marginHorizontal: 14,
     marginBottom: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 22,
     backgroundColor: colors.accentDeep,
@@ -70,7 +71,7 @@ function createStyles(colors: AppColors) {
     backgroundColor: colors.highlight
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
     color: colors.text
   },

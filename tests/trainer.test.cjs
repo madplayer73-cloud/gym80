@@ -23,6 +23,148 @@ const { getRememberedAccessory } = require('../src/utils/exerciseMemory.ts');
 const { getBodyWeight, getProgressSummary, isPersonalData } = require('../src/utils/personalData.ts');
 const { estimateSessionCalories, estimateWorkoutCalories } = require('../src/utils/calories.ts');
 const { parseMachineDrafts } = require('../src/utils/machineDraft.ts');
+const { applySetTarget } = require('../src/utils/setTargets.ts');
+const { buildExerciseTrends, summarizeSessions, getRecords, shiftDate, monthKey } = require('../src/utils/progressAnalytics.ts');
+const { parseAvailableWeights, selectAvailableWeight } = require('../src/utils/availableWeights.ts');
+const { getPreviousWorkingSets } = require('../src/utils/previousSets.ts');
+const { getLiveSetRecord } = require('../src/utils/liveSetRecord.ts');
+
+test('progression requires different days at the same weight, and respects a long break', () => {
+  const sameDay = [entry('1'), entry('2', { completedAt: entry('1').completedAt })];
+  assert.equal(getTrendProgressionAdvice(sameDay, chest).action, 'hold');
+  assert.equal(getTrendProgressionAdvice([entry('1', { weightKg: 32.5 }), entry('2')], chest).action, 'hold');
+  assert.equal(getTrendProgressionAdvice([entry('20'), entry('21')], chest).action, 'deload');
+  assert.equal(suggestWorkingWeight([entry('20'), entry('21')], chest), 27.5);
+  const painfulRepeat = entry('2', { completedAt: entry('1').completedAt, painLevel: 6 });
+  assert.equal(getTrendProgressionAdvice([entry('1'), painfulRepeat], chest).action, 'swap_or_stop');
+  const incomplete = entry('1', { setLogs: Array.from({length:3}, (_,i) => ({id:String(i), completed:true, reps:12, weightKg:30})) });
+  assert.notEqual(getTrendProgressionAdvice([incomplete, entry('2')], chest).action, 'increase');
+});
+
+test('live records compare clean completed sets and do not repeat or mix warmups', () => {
+  const set = {id:'new', setNumber:1, completed:true, setType:'working', weightKg:30, reps:13, painLevel:0};
+  assert.match(getLiveSetRecord(set, [entry('1')], [], chest), /rekord/);
+  assert.equal(getLiveSetRecord(set, [], [], chest), null);
+  assert.equal(getLiveSetRecord({...set, setType:'warmup'}, [entry('1')], [], chest), null);
+  assert.equal(getLiveSetRecord({...set, painLevel:3}, [entry('1')], [], chest), null);
+  assert.equal(getLiveSetRecord(set, [entry('1')], [{...set,id:'earlier'}], chest), null);
+  assert.equal(getLiveSetRecord({...set, weightKg:29,reps:12}, [entry('1')], [], chest), null);
+  assert.match(getLiveSetRecord({...set, weightKg:29,reps:12}, [entry('1')], [], chest, 'assisted'), /dopomoci/);
+  assert.match(getLiveSetRecord(set, [entry('1')], [], {...chest,equipment:'dumbbell'}), /na jednoručku/);
+});
+
+test('available dumbbells parse decimals and persist without invalidating old personal data', () => {
+  assert.deepEqual(parseAvailableWeights('12,5; 8; 10; 8'), [8,10,12.5]);
+  assert.deepEqual(parseAvailableWeights(''), []);
+  assert.throws(()=>parseAvailableWeights('8,10,12'));
+  assert.throws(()=>parseAvailableWeights('-5; 10'));
+  const data={measurements:[],routines:[]};
+  assert.equal(isPersonalData(data), true);
+  assert.equal(isPersonalData({...data,availableDumbbellWeightsKg:[8,10,12.5]}), true);
+  assert.equal(isPersonalData({...data,availableDumbbellWeightsKg:[NaN]}), false);
+  assert.equal(selectAvailableWeight([8,10,12],10,'increase'),12);
+  assert.equal(selectAvailableWeight([8,10,12],12,'increase'),12);
+  assert.equal(selectAvailableWeight([8,10,12],10,'reduce'),8);
+  assert.equal(selectAvailableWeight([8,10,12],8,'reduce'),undefined);
+});
+
+test('dumbbell progression proposes available weights and holds at the largest one', () => {
+  const m={...mockMachines.find(m=>m.equipment==='dumbbell'),availableWeightsKg:[8,10,12]};
+  const history=[entry('1',{machineId:m.id,weightKg:10,reps:15}),entry('2',{machineId:m.id,weightKg:10,reps:15})];
+  assert.equal(suggestWorkingWeight(history,m),12);
+  assert.match(getTrendProgressionAdvice(history,m).message,/2 kg/);
+  assert.equal(getPlannedProgressionAdvice({machine:m,latestEntry:history[0],trendAdvice:getTrendProgressionAdvice(history,m),plannedWeightKg:10,plannedSets:4,plannedReps:15}).message,getTrendProgressionAdvice(history,m).message);
+  const top=history.map(e=>({...e,weightKg:12}));
+  assert.equal(suggestWorkingWeight(top,m),12);
+  assert.equal(getTrendProgressionAdvice(top,m).action,'hold');
+});
+
+test('previous series comparison excludes today, warmups and unfinished sets', () => {
+  const history=[entry('3',{completedAt:'2026-10-09T12:00:00',weightKg:8}),entry('1',{completedAt:'2026-10-11T12:00:00',weightKg:20}),entry('2',{completedAt:'2026-10-10T12:00:00',setLogs:[{setNumber:1,completed:true,setType:'warmup',weightKg:5,reps:8},{setNumber:3,completed:true,weightKg:12,reps:10},{setNumber:2,completed:true,weightKg:10,reps:12},{setNumber:4,completed:false,weightKg:15,reps:8}]})];
+  assert.deepEqual(getPreviousWorkingSets(history,'2026-10-11').map(s=>s.weightKg),[10,12]);
+  assert.equal(getPreviousWorkingSets([history[0]],'2026-10-11').length,4);
+});
+
+test('six dumbbell curl variants have independent catalog IDs and progress histories', () => {
+  const exercises = mockMachines.filter(m => m.equipment === 'dumbbell');
+  assert.equal(exercises.length, 6);
+  assert.equal(new Set(exercises.map(m => m.id)).size, 6);
+  assert.deepEqual(exercises.map(m => m.modelName), ['Reverse Grip Curls', 'Alternating Hammer Curls', 'Rotational Curls', 'Alternating Rotational Curls', 'Hammer Grip Curls', 'Bicep Curls']);
+  for (const exercise of exercises) {
+    assert.equal(exercise.brand, 'Volne vahy');
+    assert.equal(exercise.movementPattern, 'elbowFlexion');
+    assert.equal(exercise.exerciseType, 'isolation');
+    assert.equal(exercise.accessoryIds, undefined);
+    assert.equal(exercise.referenceAssets.length,2);
+    for (const asset of exercise.referenceAssets) assert.ok(fs.existsSync(require('node:path').join(__dirname,'../assets/exercises',asset)));
+  }
+  const sessions = [session(exercises.map((m, i) => entry(String(i), {machineId:m.id, weightKg:10+i, reps:12})))];
+  const trends = buildExerciseTrends(sessions, id => mockMachines.find(m => m.id === id));
+  assert.equal(trends.length, 6);
+  assert.equal(trends[0].points[0].volume, 10*12*4);
+  assert.deepEqual(plan({routineMachineIds:exercises.map(m=>m.id)}).exercises.map(e=>e.machine.id), exercises.map(m=>m.id));
+  assert.ok(plan().exercises.every(e=>e.machine.equipment!=='dumbbell'));
+});
+
+test('bulk targets repeatedly update all unfinished sets including manual overrides, never completed ones', () => {
+  const logs = Array.from({length:4},(_,i)=>({id:String(i),setNumber:i+1,completed:i===0,manualOverride:true,weightKg:60,reps:16}));
+  let updated = applySetTarget(logs,'weightKg','62,5');
+  assert.deepEqual(updated.map(s=>s.weightKg),[60,62.5,62.5,62.5]);
+  updated = applySetTarget(updated,'reps','12');
+  assert.deepEqual(updated.map(s=>s.reps),[16,12,12,12]);
+  updated = applySetTarget(updated,'weightKg','65');
+  assert.deepEqual(updated.map(s=>s.weightKg),[60,65,65,65]);
+  assert.equal(updated[0],logs[0]);
+  assert.deepEqual(applySetTarget(updated,'weightKg','').map(s=>s.weightKg),[60,undefined,undefined,undefined]);
+  assert.deepEqual(applySetTarget(updated,'weightKg','0').map(s=>s.weightKg),[60,0,0,0]);
+  assert.equal(applySetTarget(updated,'weightKg','NaN'),updated);
+  assert.equal(applySetTarget(updated,'reps','2.5'),updated);
+});
+test('bulk weights scale warmups, while warmup reps and completed warmups remain intact', () => {
+  const logs=[{id:'w',setNumber:1,setType:'warmup',targetPercent:50,weightKg:30,reps:8,completed:false,manualOverride:true},{id:'d',setNumber:2,setType:'warmup',targetPercent:80,weightKg:48,reps:5,completed:true}];
+  assert.deepEqual(applySetTarget(logs,'weightKg','70').map(s=>s.weightKg),[35,48]);
+  assert.deepEqual(applySetTarget(logs,'reps','12'),logs);
+});
+test('analytics count real working sets, exclude warmups and incomplete sets, use per-set volume', () => {
+  const get=id=>mockMachines.find(m=>m.id===id);
+  const s={...session([entry('1',{setLogs:[{completed:true,setType:'warmup',weightKg:20,reps:10},{completed:true,weightKg:60,reps:12},{completed:true,weightKg:55,reps:10},{completed:false,weightKg:99,reps:99}]})]),workoutDate:'2026-10-01',cleanDurationSec:600};
+  const result=summarizeSessions([s,{...s,id:'old',workoutDate:'2026-09-01',cleanDurationSec:undefined}],get);
+  assert.equal(result.sets,4); assert.equal(result.volume,2540); assert.equal(result.duration,600); assert.equal(result.unmeasured,1);
+  const trend=buildExerciseTrends([s],get)[0];
+  assert.equal(trend.points[0].volume,1270); assert.equal(trend.points[0].weight,60);
+});
+test('trends isolate grips and variants, sort dates and recognize reps at the same weight', () => {
+  const get=id=>mockMachines.find(m=>m.id===id);
+  const sessions=[{...session([entry('2',{weightKg:60,reps:16,accessoryId:'2110'})]),workoutDate:'2026-10-02'},
+    {...session([entry('1',{weightKg:60,reps:12,accessoryId:'2110'}),entry('3',{weightKg:100,accessoryId:'2132'})]),workoutDate:'2026-10-01'}];
+  const trends=buildExerciseTrends(sessions,get); assert.equal(trends.length,2);
+  const t=trends.find(t=>t.context.includes('2110')); assert.equal(t.points[0].date,'2026-10-01');
+  assert.ok(getRecords(t).some(r=>r.label.includes('60 kg')&&r.value==='12 → 16 op.'));
+});
+test('assistance and bodyweight are never treated as lifted volume', () => {
+  const assisted={...chest,exerciseVariants:[{id:'a',nameSk:'a',descriptionSk:'',loadType:'assisted'}]};
+  const sessions=[{...session([entry('1',{weightKg:40,reps:8})]),workoutDate:'2026-10-01'}, {...session([entry('2',{weightKg:30,reps:10})]),workoutDate:'2026-10-02'}];
+  const trend=buildExerciseTrends(sessions,()=>assisted)[0];
+  assert.equal(trend.points[0].volume,undefined); assert.equal(summarizeSessions(sessions,()=>assisted).volume,0);
+  assert.equal(getRecords(trend)[0].value,'30 kg');
+  const body={...assisted,exerciseVariants:[{...assisted.exerciseVariants[0],loadType:'bodyweight'}]};
+  assert.equal(getRecords(buildExerciseTrends(sessions,()=>body)[0]).some(r=>r.label.includes('váha')),false);
+});
+test('calendar helpers handle year changes and duplicate training days', () => {
+  assert.equal(monthKey('2026-01-31',-1),'2025-12'); assert.equal(shiftDate('2026-01-01',-1),'2025-12-31');
+  const s={...session([entry('1')]),workoutDate:'2026-10-01'};
+  assert.equal(summarizeSessions([s,{...s,id:'duplicate'}],()=>chest).workouts,1);
+});
+
+test('missing repetitions do not invent zero-rep records or volume', () => {
+  const sessions=[session([entry('1',{reps:undefined,setLogs:[{completed:true,weightKg:60}]})])];
+  const trend=buildExerciseTrends(sessions,()=>chest)[0];
+  assert.equal(trend.points[0].reps,undefined);
+  assert.equal(trend.points[0].volume,undefined);
+  assert.deepEqual(trend.points[0].repsByWeight,{});
+  assert.equal(getRecords(trend).length,1);
+  assert.equal(summarizeSessions(sessions,()=>chest).volume,0);
+});
 
 test('draft serialization preserves unsaved fields and completed series per grip', () => {
   const draft = { variantId: null, accessoryId: null, weightKg: '32.5', sets: '4', reps: '10', durationMin: '20', speedKph: '6', inclinePercent: '0', restSeconds: '90', note: 'rozpracovane', updatedAt: new Date().toISOString(), feeling: 'akurat', rpe: 8, painLevel: 0, painLocation: 'nie', techniqueQuality: 'cista', setLogs: [{ id: '1', setNumber: 1, completed: true, weightKg: 32.5, reps: 10 }] };

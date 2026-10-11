@@ -2,6 +2,11 @@ import React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MachineSetupCard } from "../components/MachineSetupCard";
 import { parseMachineDrafts } from "../utils/machineDraft";
+import { applySetTarget } from "../utils/setTargets";
+import { DumbbellReferenceCard } from "../components/DumbbellReferenceCard";
+import { DumbbellSettingsCard } from "../components/DumbbellSettingsCard";
+import { getPreviousWorkingSets } from "../utils/previousSets";
+import { getLiveSetRecord } from "../utils/liveSetRecord";
 import {
   Image,
   Linking,
@@ -56,6 +61,7 @@ type MachineDetailEntry = WorkoutEntry & {
 };
 
 type MachineDetailScreenProps = {
+  onSaveDumbbellWeights: (weights: number[]) => void;
   onSaveMachineSetup: (setup: MachineSetup) => void;
   machine: Machine;
   plannedExercise?: PlannedExercise;
@@ -161,26 +167,6 @@ function createSetLog({
     techniqueQuality,
     completed: false
   };
-}
-
-function syncSetWeightsForWorkingWeight(logs: TrainingSetLog[], workingWeightKg: number) {
-  return logs.map((setLog) => {
-    if (setLog.completed || setLog.manualOverride) {
-      return setLog;
-    }
-
-    if (setLog.setType === "warmup") {
-      return {
-        ...setLog,
-        weightKg: getWarmupWeight(workingWeightKg, setLog.targetPercent) ?? setLog.weightKg
-      };
-    }
-
-    return {
-      ...setLog,
-      weightKg: workingWeightKg
-    };
-  });
 }
 
 function getSetTitle(setLog: TrainingSetLog, workingIndex: number) {
@@ -319,6 +305,7 @@ function MachineDetailForm({
   initialDrafts,
   storageKey,
   onSaveMachineSetup,
+  onSaveDumbbellWeights,
   machine,
   plannedExercise,
   entries,
@@ -353,7 +340,8 @@ function MachineDetailForm({
     [machine.exerciseVariants, selectedVariantId]
   );
   const entriesForSelectedVariant = React.useMemo(() => {
-    const accessoryEntries = entries.filter((entry) => (entry.accessoryId ?? null) === selectedAccessoryId);
+    const accessoryEntries = entries.filter((entry) => (entry.accessoryId ?? null) === selectedAccessoryId)
+      .sort((a,b) => b.completedAt.localeCompare(a.completedAt));
     if (!selectedVariant) {
       return accessoryEntries;
     }
@@ -366,6 +354,7 @@ function MachineDetailForm({
     );
   }, [entries, machine, selectedVariant, selectedAccessoryId]);
   const latestEntry = entriesForSelectedVariant[0];
+  const previousWorkingSets = getPreviousWorkingSets(entriesForSelectedVariant);
   const isBodyweightVariant = selectedVariant?.loadType === "bodyweight";
   const tracksWeight = !isCardio && !isBodyweightVariant;
   const machineImages = React.useMemo(
@@ -448,6 +437,8 @@ function MachineDetailForm({
   const [techniqueQuality, setTechniqueQuality] = React.useState<TechniqueQuality>("cista");
   const [restSeconds, setRestSeconds] = React.useState(String(restTimerSeconds));
   const [setLogs, setSetLogs] = React.useState<TrainingSetLog[]>([]);
+  const [recordMessage, setRecordMessage] = React.useState<string | null>(null);
+  React.useEffect(() => setRecordMessage(null), [machine.id, selectedVariantId, selectedAccessoryId]);
   const [collapsedSetIds, setCollapsedSetIds] = React.useState<Record<string, boolean>>({});
   const [isWarmupConfirmed, setIsWarmupConfirmed] = React.useState(false);
   const [isWarmupDismissed, setIsWarmupDismissed] = React.useState(false);
@@ -468,6 +459,7 @@ function MachineDetailForm({
     : null;
   const plannedProgressionAdvice = !isCardio
     ? getPlannedProgressionAdvice({
+        machine,
         latestEntry,
         trendAdvice: latestProgressionAdvice,
         plannedWeightKg: Number(weightKg),
@@ -541,7 +533,9 @@ function MachineDetailForm({
           reps: workingReps,
           restSecondsUsed: workingRest,
           techniqueQuality: setLog.techniqueQuality ?? latestEntry.techniqueQuality ?? "cista",
-          completed: false
+          completed: false,
+          completedAt: undefined,
+          manualOverride: false
         }))
         .slice(0, workingSets) ?? [];
     const generatedWorkingLogs = Array.from(
@@ -626,33 +620,13 @@ function MachineDetailForm({
   };
 
   const handleWorkingWeightChange = (value: string) => {
-    setWeightKg(value);
-    const parsedWeight = Number(value);
-
-    if (!parsedWeight) {
-      return;
-    }
-
-    setSetLogs((currentLogs) => syncSetWeightsForWorkingWeight(currentLogs, parsedWeight));
+    setWeightKg(value.replace(",", "."));
+    setSetLogs((currentLogs) => applySetTarget(currentLogs, "weightKg", value));
   };
 
   const handleWorkingRepsChange = (value: string) => {
     setReps(value);
-    const parsedReps = Number(value);
-
-    if (!parsedReps) {
-      return;
-    }
-
-    setSetLogs((currentLogs) =>
-      currentLogs.map((setLog) =>
-        setLog.setType === "warmup" || setLog.completed
-          ? setLog
-          : setLog.manualOverride
-            ? setLog
-            : { ...setLog, reps: parsedReps }
-      )
-    );
+    setSetLogs((currentLogs) => applySetTarget(currentLogs, "reps", value));
   };
 
   const addSuggestedWarmupSets = () => {
@@ -757,6 +731,9 @@ function MachineDetailForm({
     const completedSet = setLogs.find((setLog) => setLog.setNumber === setNumber);
 
     if (completedSet) {
+      const record = getLiveSetRecord({ ...completedSet, completed: true }, entriesForSelectedVariant, setLogs, machine, selectedVariant?.loadType);
+      setRecordMessage(record);
+      if (record) triggerSuccessHaptic();
       setCollapsedSetIds((current) => ({ ...current, [completedSet.id]: true }));
     }
     setActiveRestTimer(
@@ -908,11 +885,14 @@ function MachineDetailForm({
         </Pressable>
       </View>
 
-      {!isCardio ? <MachineSetupCard setup={userExerciseProfile?.machineSetup} lastWeight={latestEntry?.weightKg} onSave={onSaveMachineSetup} /> : null}
+      {!isCardio && machine.equipment !== "dumbbell" ? <MachineSetupCard setup={userExerciseProfile?.machineSetup} lastWeight={latestEntry?.weightKg} onSave={onSaveMachineSetup} /> : null}
+      {machine.equipment === "dumbbell" ? <DumbbellSettingsCard setup={userExerciseProfile?.machineSetup} weights={machine.availableWeightsKg} onSaveSetup={onSaveMachineSetup} onSaveWeights={onSaveDumbbellWeights} /> : null}
       {draftMessage ? <Text accessibilityRole="alert" style={styles.subtitle}>{draftMessage}</Text> : null}
       <View style={styles.hero}>
         <Text style={styles.title}>{machine.displayNameSk}</Text>
         <Text style={styles.subtitle}>Znacka {machine.brand}</Text>
+        {machine.equipment === "dumbbell" ? <DumbbellReferenceCard machine={machine} /> : null}
+        {machine.equipment === "dumbbell" ? <Text style={styles.subtitle}>Váha = jedna jednoručka. Opakovania = jedna ruka. Napríklad 10 kg × 12 op. znamená 12 opakovaní na každú ruku; nezapisuj 20 kg ani súčet 24 opakovaní. Objem v grafe je podľa tohto zápisu, za jednu stranu.</Text> : null}
 
         {machineImage ? (
           <Pressable
@@ -1413,7 +1393,8 @@ function MachineDetailForm({
             ) : null}
             {tracksWeight ? (
               <>
-                <Text style={styles.fieldLabel}>Navrhovana vaha</Text>
+                <Text style={styles.fieldLabel}>{machine.equipment === "dumbbell" ? "Navrhovana vaha jednej jednorucky" : "Navrhovana vaha"}</Text>
+                <Text style={styles.fieldLabel}>Zmena vahy / opakovani plati pre vsetky nehotove pracovne serie. Hotove ostanu nezmenene.</Text>
                 <View style={styles.weightAdjustRow}>
                   <Pressable onPress={() => adjustWeight(-2.5)} style={styles.adjustButton}>
                     <Text style={styles.adjustButtonLabel}>-2.5</Text>
@@ -1458,7 +1439,7 @@ function MachineDetailForm({
                 />
               </View>
               <View style={styles.inlineField}>
-                <Text style={styles.fieldLabel}>Opakovania</Text>
+                <Text style={styles.fieldLabel}>{machine.equipment === "dumbbell" ? "Opakovania na jednu ruku" : "Opakovania"}</Text>
                 <TextInput
                   value={reps}
                   onChangeText={handleWorkingRepsChange}
@@ -1514,6 +1495,7 @@ function MachineDetailForm({
             </View>
 
             <Text style={styles.fieldLabel}>Serie k tomuto cviku</Text>
+            {recordMessage ? <Text accessibilityRole="alert" style={styles.fieldLabel}>{recordMessage}</Text> : null}
             <View style={styles.setStack}>
               {setLogs.map((setLog) => {
                 const workingIndex =
@@ -1523,6 +1505,8 @@ function MachineDetailForm({
                         .slice(0, setLog.setNumber)
                         .filter((item) => item.setType !== "warmup").length;
                 const setTitle = getSetTitle(setLog, workingIndex);
+                const previousSet = setLog.setType === "warmup" ? undefined : previousWorkingSets[workingIndex-1];
+                const comparison = setLog.setType === "warmup" ? null : `Minule: ${previousSet ? `${previousSet.weightKg ?? "—"} kg × ${previousSet.reps ?? "—"} op.` : "bez zápisu"} → Dnes: ${setLog.weightKg ?? "—"} kg × ${setLog.reps ?? "—"} op.`;
                 const isCollapsed = setLog.completed && collapsedSetIds[setLog.id] !== false;
                 const hasNextUncompletedSet = setLogs.some(
                   (nextSetLog) =>
@@ -1534,6 +1518,7 @@ function MachineDetailForm({
                     <View key={setLog.id} style={styles.collapsedSetCard}>
                       <View style={styles.collapsedSetTextWrap}>
                         <Text style={styles.collapsedSetTitle}>OK {setTitle}</Text>
+                        {comparison ? <Text style={styles.collapsedSetMeta}>{comparison}</Text> : null}
                         <Text style={styles.collapsedSetMeta}>
                           {tracksWeight
                             ? `${setLog.weightKg ?? 0} kg x ${setLog.reps ?? 0} op.`
@@ -1568,6 +1553,7 @@ function MachineDetailForm({
                     <View style={styles.setHeader}>
                       <View>
                         <Text style={styles.setTitle}>{setTitle}</Text>
+                        {comparison ? <Text style={styles.setSubtitle}>{comparison}</Text> : null}
                         {setLog.setType === "warmup" ? (
                           <Text style={styles.setSubtitle}>
                             priprav telo, nejdeme bojovat o ego

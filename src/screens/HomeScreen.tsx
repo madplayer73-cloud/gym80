@@ -41,6 +41,7 @@ import { WorkoutClock } from "../utils/workoutClock";
 import { buildDailySuggestion } from "../utils/trainingPlan";
 
 type HomeScreenProps = {
+  onOpenProgress: () => void;
   machines: Machine[];
   personalData: PersonalData;
   onSaveRoutine: (routine: PersonalRoutine) => void;
@@ -146,6 +147,7 @@ function translateTrainingLevel(level: UserTrainingLevel | undefined) {
 }
 
 export function HomeScreen({
+  onOpenProgress,
   machines,
   personalData,
   onSaveRoutine,
@@ -259,6 +261,10 @@ export function HomeScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <Pressable accessibilityRole="button" onPress={onOpenProgress} style={{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:18,padding:14,gap:4}}>
+        <Text style={{color:colors.highlight,fontWeight:"800",fontSize:16}}>↗ Môj progres</Text>
+        <Text style={{color:colors.textMuted}}>Grafy strojov, rekordy a kalendár · {new Set(sessions.filter(s=>s.entries.length).map(s=>s.workoutDate.slice(0,10))).size} tréningových dní</Text>
+      </Pressable>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>AI trener</Text>
         <Text style={styles.title}>Dnesny navrh treningu</Text>

@@ -16,6 +16,7 @@ import { getWorkoutElapsed, transitionWorkoutClock } from "./src/utils/workoutCl
 import { SideMenu } from "./src/components/SideMenu";
 import { CameraPrepScreen } from "./src/screens/CameraPrepScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
+import { ProgressScreen } from "./src/screens/ProgressScreen";
 import { HomeScreen, TrainerSessionSettings } from "./src/screens/HomeScreen";
 import { PlannedExercise } from "./src/utils/trainerPlanner";
 import { MachineDetailScreen } from "./src/screens/MachineDetailScreen";
@@ -274,7 +275,7 @@ function AppShell() {
   const [activeTab, setActiveTab] = useState<AppTab>("home");
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedPlannedExercise, setSelectedPlannedExercise] = useState<PlannedExercise | undefined>();
-  const [selectedMachineSource, setSelectedMachineSource] = useState<"home" | "machines">("machines");
+  const [selectedMachineSource, setSelectedMachineSource] = useState<"home" | "machines" | "progress">("machines");
   const [machinesListState, setMachinesListState] = useState<MachinesListState>({
     searchQuery: "",
     selectedFilter: "Vsetko",
@@ -374,12 +375,14 @@ function AppShell() {
   const isPasswordCloudLogin = isPocketBaseCloudEnabled();
   const cloudLoginProviderLabel = getCloudLoginProviderLabel();
 
+  const configuredMachines = useMemo(() => mockMachines.map(machine => machine.equipment === "dumbbell"
+    ? {...machine, availableWeightsKg: personalData.availableDumbbellWeightsKg} : machine), [personalData.availableDumbbellWeightsKg]);
   const machineMap = useMemo(
     () =>
       new Map(
-        [...mockMachines, ...routineMachines].map((machine) => [machine.id, machine])
+        [...configuredMachines, ...routineMachines].map((machine) => [machine.id, machine])
       ),
-    []
+    [configuredMachines]
   );
 
   const latestEntries = useMemo(
@@ -435,7 +438,7 @@ function AppShell() {
   };
 
   const navigateBackFromMachine = () => {
-    setActiveTab("machines");
+    setActiveTab(selectedMachineSource === "progress" ? "progress" : "machines");
   };
 
   const navigateBackToPlan = () => {
@@ -889,7 +892,7 @@ function AppShell() {
       return [newSession, ...currentSessions];
     });
 
-    setActiveTab(selectedMachineSource === "home" ? "home" : "machines");
+    setActiveTab(selectedMachineSource);
     setToastMessage(motivationMessage);
 
     setUserExerciseProfiles((currentProfiles) => {
@@ -1173,9 +1176,10 @@ function AppShell() {
   if (activeTab === "home") {
     content = (
       <HomeScreen
+        onOpenProgress={() => setActiveTab("progress")}
         personalData={personalData}
         onSaveRoutine={(routine) => setPersonalData((current) => ({ ...current, routines: [...current.routines.filter((item) => item.id !== routine.id), routine] }))}
-        machines={mockMachines}
+        machines={configuredMachines}
         sessions={sessions}
         trainerSettings={trainerSettings}
         userExerciseProfiles={userExerciseProfiles}
@@ -1192,7 +1196,7 @@ function AppShell() {
         favoriteMachineIds={favoriteMachineIds}
         listState={machinesListState}
         machineUsageCounts={machineUsageCounts}
-        machines={mockMachines}
+        machines={configuredMachines}
         onChangeListState={(nextListState) =>
           setMachinesListState((currentListState) => ({
             ...currentListState,
@@ -1219,15 +1223,23 @@ function AppShell() {
     );
   }
 
+  if (activeTab === "progress") {
+    content = <ProgressScreen sessions={sessions} personalData={personalData}
+      getMachine={(id) => machineMap.get(id)}
+      onOpenMachine={(machine) => { setSelectedMachine(machine); setSelectedPlannedExercise(undefined); setSelectedMachineSource("progress"); setActiveTab("machine-detail"); }}
+      onSaveMeasurement={(measurement) => setPersonalData((current) => ({ ...current, measurements: [...current.measurements.filter((item) => item.date !== measurement.date), measurement] }))} />;
+  }
+
   if (activeTab === "machine-detail" && selectedMachine) {
     content = (
       <MachineDetailScreen
         key={selectedMachine.id}
         onSaveMachineSetup={(machineSetup) => setUserExerciseProfiles((current) => ({ ...current, [selectedMachine.id]: { ...current[selectedMachine.id], machineId: selectedMachine.id, updatedAt: new Date().toISOString(), machineSetup } }))}
+        onSaveDumbbellWeights={(availableDumbbellWeightsKg) => setPersonalData(current => ({...current,availableDumbbellWeightsKg}))}
         entries={latestEntries.filter(
           (entry) => entry.machine?.id === selectedMachine.id
         )}
-        machine={selectedMachine}
+        machine={machineMap.get(selectedMachine.id) ?? selectedMachine}
         plannedExercise={selectedPlannedExercise}
         userExerciseProfile={userExerciseProfiles[selectedMachine.id]}
         isFavorite={favoriteMachineIds.includes(selectedMachine.id)}
@@ -1242,7 +1254,7 @@ function AppShell() {
   if (activeTab === "camera") {
     content = (
       <CameraPrepScreen
-        machines={mockMachines}
+        machines={configuredMachines}
         onBack={navigateBackFromCamera}
         onPickMachine={(machine) => openMachine(machine, "machines")}
       />
@@ -1303,7 +1315,7 @@ function AppShell() {
             <Text style={styles.headerSubtitle}>{getTabLabel(activeTab)}</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>1.1</Text>
+            <Text style={styles.headerBadgeText}>1.2</Text>
           </View>
         </View>
       ) : null}
@@ -1729,6 +1741,7 @@ function createAuthStyles(colors: AppColors) {
 }
 
 function getTabLabel(tab: AppTab) {
+  if (tab === "progress") return "Môj progres";
   if (tab === "machines") {
     return "Stroje";
   }
