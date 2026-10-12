@@ -221,7 +221,10 @@ export type UserExerciseProfile = {
 };
 
 export type MachineSetup = { seat: string; backPad: string; cable: string; other: string };
-export type BodyMeasurement = { id: string; date: string; weightKg: number; waistCm?: number };
+export type BodyMeasurement = { id: string; date: string; weightKg: number; waistCm?: number;
+  bmi?: number; bodyFatPercent?: number; muscleMassKg?: number; waterPercent?: number;
+  visceralFat?: number; basalMetabolismKcal?: number; proteinPercent?: number; boneMassKg?: number;
+  bodyAge?: number; bodyScore?: number; idealWeightKg?: number };
 export type PersonalRoutine = { id: "A" | "B"; name: string; machineIds: string[] };
 export type PersonalData = { measurements: BodyMeasurement[]; routines: PersonalRoutine[]; availableDumbbellWeightsKg?: number[] };
 export type MachineDraft = {

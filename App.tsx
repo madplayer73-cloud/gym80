@@ -1177,6 +1177,7 @@ function AppShell() {
     content = (
       <HomeScreen
         onOpenProgress={() => setActiveTab("progress")}
+        onOpenBody={() => setActiveTab("history")}
         personalData={personalData}
         onSaveRoutine={(routine) => setPersonalData((current) => ({ ...current, routines: [...current.routines.filter((item) => item.id !== routine.id), routine] }))}
         machines={configuredMachines}
@@ -1315,7 +1316,7 @@ function AppShell() {
             <Text style={styles.headerSubtitle}>{getTabLabel(activeTab)}</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>1.2</Text>
+            <Text style={styles.headerBadgeText}>1.3</Text>
           </View>
         </View>
       ) : null}

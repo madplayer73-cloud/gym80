@@ -28,6 +28,7 @@ import {
 } from "../types";
 import { estimateSessionCalories, estimateWorkoutCalories } from "../utils/calories";
 import { getBodyWeight } from "../utils/personalData";
+import { isBodyMeasurementDue } from "../utils/bodyMeasurements";
 import { PersonalRoutinePanel } from "../components/PersonalRoutinePanel";
 import { triggerSuccessHaptic, triggerTapHaptic } from "../utils/haptics";
 import {
@@ -42,6 +43,7 @@ import { buildDailySuggestion } from "../utils/trainingPlan";
 
 type HomeScreenProps = {
   onOpenProgress: () => void;
+  onOpenBody: () => void;
   machines: Machine[];
   personalData: PersonalData;
   onSaveRoutine: (routine: PersonalRoutine) => void;
@@ -148,6 +150,7 @@ function translateTrainingLevel(level: UserTrainingLevel | undefined) {
 
 export function HomeScreen({
   onOpenProgress,
+  onOpenBody,
   machines,
   personalData,
   onSaveRoutine,
@@ -261,6 +264,10 @@ export function HomeScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <Pressable accessibilityRole="button" onPress={onOpenBody} style={{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:18,padding:14,gap:4}}>
+        <Text style={{color:colors.highlight,fontWeight:"800",fontSize:16}}>Moje telo · týždenné meranie</Text>
+        <Text style={{color:colors.textMuted}}>{isBodyMeasurementDue(personalData.measurements) ? "Odváž sa a zapíš nové meranie. Pripomienka každú nedeľu od 9:00." : "Tento týždeň už máš meranie. Zobraziť údaje a grafy."}</Text>
+      </Pressable>
       <Pressable accessibilityRole="button" onPress={onOpenProgress} style={{backgroundColor:colors.surface,borderWidth:1,borderColor:colors.border,borderRadius:18,padding:14,gap:4}}>
         <Text style={{color:colors.highlight,fontWeight:"800",fontSize:16}}>↗ Môj progres</Text>
         <Text style={{color:colors.textMuted}}>Grafy strojov, rekordy a kalendár · {new Set(sessions.filter(s=>s.entries.length).map(s=>s.workoutDate.slice(0,10))).size} tréningových dní</Text>

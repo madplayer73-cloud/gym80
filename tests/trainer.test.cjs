@@ -21,6 +21,7 @@ const session = (entries) => ({ id: 'session', workoutDate: new Date().toISOStri
 const { getWorkoutElapsed, transitionWorkoutClock, formatWorkoutTime } = require('../src/utils/workoutClock.ts');
 const { getRememberedAccessory } = require('../src/utils/exerciseMemory.ts');
 const { getBodyWeight, getProgressSummary, isPersonalData } = require('../src/utils/personalData.ts');
+const { isBodyMeasurement, isBodyMeasurementDue, bodyMetrics } = require('../src/utils/bodyMeasurements.ts');
 const { estimateSessionCalories, estimateWorkoutCalories } = require('../src/utils/calories.ts');
 const { parseMachineDrafts } = require('../src/utils/machineDraft.ts');
 const { applySetTarget } = require('../src/utils/setTargets.ts');
@@ -28,6 +29,34 @@ const { buildExerciseTrends, summarizeSessions, getRecords, shiftDate, monthKey 
 const { parseAvailableWeights, selectAvailableWeight } = require('../src/utils/availableWeights.ts');
 const { getPreviousWorkingSets } = require('../src/utils/previousSets.ts');
 const { getLiveSetRecord } = require('../src/utils/liveSetRecord.ts');
+
+test('body composition fields are optional, bounded, and survive export without invented values', () => {
+  const old = {id:'body-old',date:'2026-10-10',weightKg:71.65};
+  assert.equal(isBodyMeasurement(old),true);
+  const full = {...old,bodyScore:83,bmi:21.6,bodyFatPercent:19.2,muscleMassKg:54.94,waterPercent:55.4,
+    visceralFat:12,basalMetabolismKcal:1338,proteinPercent:21.2,boneMassKg:2.94,bodyAge:33,idealWeightKg:71.4};
+  const restored = JSON.parse(JSON.stringify({measurements:[full],routines:[]}));
+  assert.equal(isPersonalData(restored),true);
+  assert.deepEqual(restored.measurements[0],full);
+  assert.equal(getBodyWeight(restored,'2026-10-11'),71.65);
+  assert.equal(old.bodyFatPercent,undefined);
+  for (const field of bodyMetrics) assert.equal(isBodyMeasurement({...full,[field.key]:field.max+1}),false,field.key);
+  assert.equal(isBodyMeasurement({...old,date:'2026-02-30'}),false);
+  assert.equal(isBodyMeasurement({...full,bodyFatPercent:-1}),false);
+  assert.equal(isBodyMeasurement({...full,bodyScore:'83'}),false);
+});
+
+test('weekly measurement reminder switches at Sunday 09:00 Bratislava including DST', () => {
+  const measured = [{id:'body',date:'2026-10-04',weightKg:70}];
+  assert.equal(isBodyMeasurementDue(measured,new Date('2026-10-11T06:59:00Z')),false);
+  assert.equal(isBodyMeasurementDue(measured,new Date('2026-10-11T07:00:00Z')),true);
+  assert.equal(isBodyMeasurementDue([{...measured[0],date:'2026-10-11'}],new Date('2026-10-12T10:00:00Z')),false);
+  assert.equal(isBodyMeasurementDue([{...measured[0],date:'2026-10-10'}],new Date('2026-10-12T10:00:00Z')),true);
+  const winter=[{...measured[0],date:'2026-10-18'}];
+  assert.equal(isBodyMeasurementDue(winter,new Date('2026-10-25T07:59:00Z')),false);
+  assert.equal(isBodyMeasurementDue(winter,new Date('2026-10-25T08:00:00Z')),true);
+  assert.equal(isBodyMeasurementDue([],new Date('2026-10-12T10:00:00Z')),true);
+});
 
 test('progression requires different days at the same weight, and respects a long break', () => {
   const sameDay = [entry('1'), entry('2', { completedAt: entry('1').completedAt })];

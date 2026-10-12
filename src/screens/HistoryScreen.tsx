@@ -117,7 +117,7 @@ export function HistoryScreen({
               : "Kalórie sú orientačný odhad, nie presné meranie výdaja."}
         </Text>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: isWeightFormOpen }} onPress={() => setIsWeightFormOpen(!isWeightFormOpen)} style={styles.backupButton}>
-          <Text style={styles.backupButtonText}>{isWeightFormOpen ? "Schovať zadanie hmotnosti" : "Zadať / upraviť telesnú hmotnosť"}</Text>
+          <Text style={styles.backupButtonText}>{isWeightFormOpen ? "Schovať Moje telo" : "Moje telo · merania a grafy"}</Text>
         </Pressable>
         {isWeightFormOpen ? <BodyMeasurementsCard measurements={personalData.measurements} onSave={onSaveMeasurement} /> : null}
         {missingWeightCount ? <Text style={styles.subtitle}>Dnešné meranie sa použije od dneška. Ak poznáš hmotnosť z minulosti, zadaj aj vtedajší dátum; dnešnú váhu spätne nevymýšľame.</Text> : null}
