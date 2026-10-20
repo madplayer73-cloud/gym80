@@ -66,6 +66,16 @@ test('smart scale screenshots parse Slovak labels, decimal commas, and two-page 
   assert.deepEqual(parsed,{bodyScore:83,weightKg:71.65,basalMetabolismKcal:1338,visceralFat:12,bmi:21.6,
     bodyFatPercent:19.2,muscleMassKg:54.94,waterPercent:55.4,proteinPercent:21.2,boneMassKg:2.94,
     bodyAge:33,idealWeightKg:71.4});
+  const reordered = parseScaleScreenshotText(`Bielkoviny 21,2 % Kostná hmota 2,92 kg Vek35 Vek: Ideálna váha71,40 kg
+    Viscerálny tuk 11 BMI 21,5 Telesný tuk 19,4 % Svalstvo 54,49 kg Voda 55,2 %
+    Skóre tela 84 71,25 kg Bazálny metabolizmus 1 332 kcal`);
+  assert.deepEqual(reordered,{bodyScore:84,weightKg:71.25,basalMetabolismKcal:1332,visceralFat:11,bmi:21.5,
+    bodyFatPercent:19.4,muscleMassKg:54.49,waterPercent:55.2,proteinPercent:21.2,boneMassKg:2.92,
+    bodyAge:35,idealWeightKg:71.4});
+  const commaDroppedByOcr = parseScaleScreenshotText(`Kostná hmota 292kg Vekš5Vek: Ideálna váha71,40 kg
+    Telesný tuk 194% Svalstvo 5449kg Voda 55,2% Skóre tela 84 71,25 kg`);
+  assert.deepEqual(commaDroppedByOcr,{bodyScore:84,weightKg:71.25,bodyFatPercent:19.4,muscleMassKg:54.49,
+    waterPercent:55.2,boneMassKg:2.92,bodyAge:35,idealWeightKg:71.4});
   assert.deepEqual(parseScaleScreenshotText('Skóre tela 71,65 kg BMI 21,6'),{weightKg:71.65,bmi:21.6});
   assert.deepEqual(parseScaleScreenshotText('text bez hodnôt'),{});
 });
