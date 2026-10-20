@@ -14,6 +14,7 @@ import { BottomNav } from "./src/components/BottomNav";
 import { WorkoutClockBar } from "./src/components/WorkoutClockBar";
 import { getWorkoutElapsed, transitionWorkoutClock } from "./src/utils/workoutClock";
 import { SideMenu } from "./src/components/SideMenu";
+import { WeeklyBodyReminder } from "./src/components/WeeklyBodyReminder";
 import { CameraPrepScreen } from "./src/screens/CameraPrepScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
 import { ProgressScreen } from "./src/screens/ProgressScreen";
@@ -22,6 +23,7 @@ import { PlannedExercise } from "./src/utils/trainerPlanner";
 import { MachineDetailScreen } from "./src/screens/MachineDetailScreen";
 import { PersonalData } from "./src/types";
 import { emptyPersonalData, isPersonalData } from "./src/utils/personalData";
+import { isBodyMeasurementDue } from "./src/utils/bodyMeasurements";
 import { MachinesListState, MachinesScreen } from "./src/screens/MachinesScreen";
 import { mockMachines } from "./src/data/mockData";
 import {
@@ -284,6 +286,7 @@ function AppShell() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [personalData, setPersonalData] = useState<PersonalData>(emptyPersonalData);
   const [hasLoadedPersonalData, setHasLoadedPersonalData] = useState(false);
+  const [bodyReminderDismissed, setBodyReminderDismissed] = useState(false);
   React.useEffect(() => {
     void AsyncStorage.getItem("gym80-personal-data-v1").then((raw) => {
       if (raw && isPersonalData(JSON.parse(raw))) setPersonalData(JSON.parse(raw));
@@ -1316,7 +1319,7 @@ function AppShell() {
             <Text style={styles.headerSubtitle}>{getTabLabel(activeTab)}</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>1.3</Text>
+            <Text style={styles.headerBadgeText}>1.4</Text>
           </View>
         </View>
       ) : null}
@@ -1349,6 +1352,11 @@ function AppShell() {
         onGoogleLogin={handleGoogleLogin}
         onLogout={handleLogout}
         onSyncCloud={handleManualCloudSync}
+      />
+      <WeeklyBodyReminder
+        visible={hasLoadedPersonalData && !bodyReminderDismissed && isBodyMeasurementDue(personalData.measurements)}
+        onClose={() => setBodyReminderDismissed(true)}
+        onSave={(measurement) => setPersonalData((current) => ({...current,measurements:[...current.measurements.filter(item=>item.date!==measurement.date),measurement]}))}
       />
     </SafeAreaView>
   );

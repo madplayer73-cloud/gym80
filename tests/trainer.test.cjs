@@ -22,6 +22,7 @@ const { getWorkoutElapsed, transitionWorkoutClock, formatWorkoutTime } = require
 const { getRememberedAccessory } = require('../src/utils/exerciseMemory.ts');
 const { getBodyWeight, getProgressSummary, isPersonalData } = require('../src/utils/personalData.ts');
 const { isBodyMeasurement, isBodyMeasurementDue, bodyMetrics } = require('../src/utils/bodyMeasurements.ts');
+const { parseScaleScreenshotText } = require('../src/utils/scaleScreenshotOcr.ts');
 const { estimateSessionCalories, estimateWorkoutCalories } = require('../src/utils/calories.ts');
 const { parseMachineDrafts } = require('../src/utils/machineDraft.ts');
 const { applySetTarget } = require('../src/utils/setTargets.ts');
@@ -56,6 +57,17 @@ test('weekly measurement reminder switches at Sunday 09:00 Bratislava including 
   assert.equal(isBodyMeasurementDue(winter,new Date('2026-10-25T07:59:00Z')),false);
   assert.equal(isBodyMeasurementDue(winter,new Date('2026-10-25T08:00:00Z')),true);
   assert.equal(isBodyMeasurementDue([],new Date('2026-10-12T10:00:00Z')),true);
+});
+
+test('smart scale screenshots parse Slovak labels, decimal commas, and two-page text', () => {
+  const parsed = parseScaleScreenshotText(`Skóre tela 83 71,65 kg Bazálny metabolizmus 1 338 kcal
+    Viscerálny tuk 12 BMI 21,6 Telesný tuk 19,2 % Svalstvo 54,94 kg Voda 55,4 %
+    Bielkoviny 21,2 % Kostná hmota 2,94 kg Telesný vek 33 Ideálna váha 71,40 kg`);
+  assert.deepEqual(parsed,{bodyScore:83,weightKg:71.65,basalMetabolismKcal:1338,visceralFat:12,bmi:21.6,
+    bodyFatPercent:19.2,muscleMassKg:54.94,waterPercent:55.4,proteinPercent:21.2,boneMassKg:2.94,
+    bodyAge:33,idealWeightKg:71.4});
+  assert.deepEqual(parseScaleScreenshotText('Skóre tela 71,65 kg BMI 21,6'),{weightKg:71.65,bmi:21.6});
+  assert.deepEqual(parseScaleScreenshotText('text bez hodnôt'),{});
 });
 
 test('progression requires different days at the same weight, and respects a long break', () => {
