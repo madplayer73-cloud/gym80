@@ -329,7 +329,8 @@ function AppShell() {
       if (typeof saved.durationMin !== "number" || !saved.readiness || typeof saved.hasStarted !== "boolean") return;
       const sameDay = saved.activePlanDate === new Date().toDateString();
       setTrainerSettings((current) => ({ ...current, ...saved, ...(sameDay ? {} : {
-        hasStarted: false, activePlan: undefined, activePlanDate: undefined, clock: undefined
+        hasStarted: false, manualFocus: null, activeFocus: null, activePlan: undefined,
+        activePlanDate: undefined, clock: undefined
       }) }));
     }).catch((error) => console.log("Failed to restore training", error)).finally(() => { if (!cancelled) setHasLoadedTrainer(true); });
     return () => { cancelled = true; };
@@ -358,7 +359,8 @@ function AppShell() {
     const cleanDurationSec = getWorkoutElapsed(clock);
     setSessions((current) => current.map((session) => session.id === target?.id
       ? { ...session, workoutFeedback, feedbackAt, cleanDurationSec: (session.cleanDurationSec ?? 0) + cleanDurationSec } : session));
-    setTrainerSettings((current) => ({ ...current, hasStarted: false, activePlan: undefined,
+    setTrainerSettings((current) => ({ ...current, hasStarted: false, manualFocus: null,
+      activeFocus: null, activePlan: undefined, activePlanDate: undefined,
       clock: current.clock ? transitionWorkoutClock(current.clock, "finished") : undefined }));
     setToastMessage(target ? "Trening ukonceny. Cas a hodnotenie su v historii." : "Casovac ukonceny. Bez zapisanych cvikov sa historia nevytvorila.");
   };

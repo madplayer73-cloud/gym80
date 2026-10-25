@@ -1121,7 +1121,12 @@ function getFocusFromSession(session: WorkoutSession, machinesById: Map<string, 
 }
 
 function chooseFocus(sessions: WorkoutSession[], machinesById: Map<string, Machine>) {
-  const latest = sessions[0];
+  const latest = [...sessions]
+    .filter((session) => session.entries.length > 0)
+    .sort(
+      (left, right) =>
+        new Date(right.workoutDate).getTime() - new Date(left.workoutDate).getTime()
+    )[0];
 
   if (!latest) {
     return "Vrch tela";

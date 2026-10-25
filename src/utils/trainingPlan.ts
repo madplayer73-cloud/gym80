@@ -49,7 +49,13 @@ function getMachineById(machines: Machine[]) {
 }
 
 function getRecentSessions(sessions: WorkoutSession[], limit = 4) {
-  return sessions.slice(0, limit);
+  return [...sessions]
+    .filter((session) => session.entries.length > 0)
+    .sort(
+      (left, right) =>
+        new Date(right.workoutDate).getTime() - new Date(left.workoutDate).getTime()
+    )
+    .slice(0, limit);
 }
 
 function getFocusFromEntries(session: WorkoutSession, machinesById: Map<string, Machine>) {
@@ -98,17 +104,18 @@ function chooseFocusFromHistory(
   sessions: WorkoutSession[],
   machinesById: Map<string, Machine>
 ) {
-  const latestSession = sessions[0];
+  const recentSessions = getRecentSessions(sessions);
+  const latestSession = recentSessions[0];
 
   if (!latestSession) {
     return "Vrch tela";
   }
 
-  if (sessions.length < 3) {
+  if (recentSessions.length < 3) {
     return rotation[getFocusFromEntries(latestSession, machinesById)];
   }
 
-  const load = getRecentFocusLoad(sessions, machinesById);
+  const load = getRecentFocusLoad(recentSessions, machinesById);
 
   if (load["Spodok tela"] < load["Vrch tela"]) {
     return "Spodok tela";
@@ -355,17 +362,13 @@ export function buildDailySuggestion(
   cooldownMin = durationMin >= 90 ? 8 : 5,
   preferredFocus?: WorkoutFocus
 ): DailySuggestion {
-  const latestSession = sessions[0];
+  const latestSession = getRecentSessions(sessions, 1)[0];
   const machinesById = getMachineById(machines);
   const daysSinceLastTraining = getDaysSinceLastTraining(latestSession?.workoutDate);
   const dataConfidence: DailySuggestion["dataConfidence"] =
     sessions.length >= 4 ? "podla historie" : sessions.length >= 1 ? "ucim sa" : "zaciatok";
 
   let nextFocus: WorkoutFocus = preferredFocus ?? chooseFocusFromHistory(sessions, machinesById);
-
-  if (!preferredFocus && daysSinceLastTraining === 0 && latestSession) {
-    nextFocus = getFocusFromEntries(latestSession, machinesById);
-  }
 
   const addonMin = durationMin >= 90 ? 20 : 10;
   const mainWorkoutMin = Math.max(20, durationMin - warmupMin - cooldownMin - addonMin);

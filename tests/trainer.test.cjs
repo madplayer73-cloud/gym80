@@ -30,6 +30,7 @@ const { buildExerciseTrends, summarizeSessions, getRecords, shiftDate, monthKey 
 const { parseAvailableWeights, selectAvailableWeight } = require('../src/utils/availableWeights.ts');
 const { getPreviousWorkingSets } = require('../src/utils/previousSets.ts');
 const { getLiveSetRecord } = require('../src/utils/liveSetRecord.ts');
+const { buildDailySuggestion } = require('../src/utils/trainingPlan.ts');
 
 test('body composition fields are optional, bounded, and survive export without invented values', () => {
   const old = {id:'body-old',date:'2026-10-10',weightKg:71.65};
@@ -311,6 +312,18 @@ test('upper and lower plans cover the intended muscle groups', () => {
   const lower = plan({ preferredFocus: 'Spodok tela' });
   assert.ok(lower.exercises.some(item => item.subgroup === 'predne stehna'));
   assert.ok(lower.exercises.some(item => item.subgroup === 'zadne stehna'));
+});
+test('a completed upper-body workout immediately rotates the next suggestion to lower body', () => {
+  const completedUpper = session([entry('1')]);
+  const suggestion = buildDailySuggestion([completedUpper], mockMachines, 60, 5, 5);
+  assert.equal(suggestion.focus, 'Spodok tela');
+  assert.match(suggestion.title, /nohy/i);
+});
+test('focus selection uses the newest completed workout even when history arrives unsorted', () => {
+  const olderUpper = { ...session([entry('1')]), id: 'older', workoutDate: '2026-10-20T10:00:00.000Z' };
+  const legMachine = mockMachines.find(item => item.muscleGroup === 'Nohy');
+  const newerLower = { ...session([{ ...entry('2'), machineId: legMachine.id }]), id: 'newer', workoutDate: '2026-10-25T10:00:00.000Z', focus: 'Spodok tela' };
+  assert.equal(buildDailySuggestion([olderUpper, newerLower], mockMachines, 60, 5, 5).focus, 'Vrch tela');
 });
 test('excluded and blocked exercises never leak through or appear as alternatives', () => {
   const profiles = Object.fromEntries(mockMachines.map(machine => [machine.id, { machineId: machine.id, doNotRecommend: true }]));
