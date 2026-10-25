@@ -2,9 +2,16 @@ import { BodyMeasurement } from "../types";
 
 type ParsedScaleData = Partial<Omit<BodyMeasurement, "id" | "date">>;
 
+// Values present on the three regular Mi Fitness scale screenshots. Waist is
+// deliberately manual; ideal weight appears only when the final page is lower.
+export const scaleScreenshotMetricKeys: Array<keyof ParsedScaleData> = [
+  "bodyScore", "weightKg", "waterPercent", "basalMetabolismKcal", "visceralFat",
+  "bmi", "bodyFatPercent", "muscleMassKg", "proteinPercent", "boneMassKg", "bodyAge"
+];
+
 const number = "([0-9]{1,5}(?:\\s[0-9]{3})?(?:[.,][0-9]{1,2})?)";
 const rules: Array<[keyof ParsedScaleData, RegExp[]]> = [
-  ["bodyScore", [new RegExp(`sk[oó]re\\s*tela[^0-9]{0,30}${number}`, "i")]],
+  ["bodyScore", [new RegExp(`sk[oó]re\\s*tela[^0-9]{0,30}([0-9]{1,3})(?![0-9.,])`, "i")]],
   ["weightKg", [new RegExp(`sk[oó]re\\s*tela.{0,120}?${number}\\s*kg`, "i"), new RegExp(`hmotnos[tť][^0-9]{0,30}${number}`, "i")]],
   ["basalMetabolismKcal", [new RegExp(`baz[aá]lny\\s*metabolizmus[^0-9]{0,30}${number}`, "i")]],
   ["visceralFat", [new RegExp(`viscer[aá]lny\\s*tuk[^0-9]{0,20}${number}`, "i")]],
@@ -58,26 +65,71 @@ export function parseScaleScreenshotText(text: string): ParsedScaleData {
   return result;
 }
 
+function decimalPlaces(value: number) {
+  const text = String(value);
+  return text.includes(".") ? text.split(".")[1].length : 0;
+}
+
+export function mergeScaleReadings(primary: ParsedScaleData, fallback: ParsedScaleData): ParsedScaleData {
+  const merged: ParsedScaleData = {...fallback};
+  for (const key of Object.keys(primary) as Array<keyof ParsedScaleData>) {
+    if (primary[key] != null) merged[key] = primary[key];
+  }
+  for (const key of Object.keys(fallback) as Array<keyof ParsedScaleData>) {
+    const first = primary[key];
+    const second = fallback[key];
+    if (first == null || second == null || first === second) continue;
+    if (key === "bodyScore" && first < 40 && second >= 40) merged[key] = second;
+    else if (key === "visceralFat" && first < 5 && second >= 5) merged[key] = second;
+    else if (["weightKg", "muscleMassKg", "boneMassKg", "idealWeightKg"].includes(key)
+      && decimalPlaces(second) > decimalPlaces(first)) merged[key] = second;
+  }
+  return merged;
+}
+
+function needsVerification(data: ParsedScaleData) {
+  return scaleScreenshotMetricKeys.some(key => data[key] == null)
+    || (data.bodyScore != null && data.bodyScore < 40)
+    || (data.visceralFat != null && data.visceralFat < 5);
+}
+
 export async function recognizeScaleScreenshots(images: string[], onProgress?: (progress: number) => void) {
   const { createWorker, PSM } = await import("tesseract.js");
   let activeImageIndex = 0;
+  let passOffset = 0;
+  let passShare = 1;
   const worker = await createWorker("slk", 1, {
     logger: message => {
       if (message.status === "recognizing text" && typeof message.progress === "number") {
-        onProgress?.((activeImageIndex + message.progress) / Math.max(images.length, 1));
+        onProgress?.(passOffset + ((activeImageIndex + message.progress) / Math.max(images.length, 1)) * passShare);
       }
     }
   });
   try {
-    await worker.setParameters({tessedit_pageseg_mode: PSM.SPARSE_TEXT, preserve_interword_spaces:"1"});
-    const texts: string[] = [];
-    for (let index = 0; index < images.length; index += 1) {
-      activeImageIndex = index;
-      const result = await worker.recognize(images[index]);
-      texts.push(result.data.text);
-      onProgress?.((index + 1) / images.length);
-    }
-    return parseScaleScreenshotText(texts.join("\n"));
+    const recognizePass = async (mode: any) => {
+      await worker.setParameters({tessedit_pageseg_mode: mode, preserve_interword_spaces:"1"});
+      const texts: string[] = [];
+      for (let index = 0; index < images.length; index += 1) {
+        activeImageIndex = index;
+        const result = await worker.recognize(images[index]);
+        texts.push(result.data.text);
+        onProgress?.(passOffset + ((index + 1) / images.length) * passShare);
+      }
+      return parseScaleScreenshotText(texts.join("\n"));
+    };
+
+    // AUTO keeps rows together. SPARSE_TEXT occasionally clipped the final
+    // digit on mobile (13 -> 1, 55.47 -> 55.4 and 80 -> 10).
+    passShare = 0.72;
+    const primary = await recognizePass(PSM.AUTO);
+    if (!needsVerification(primary)) { onProgress?.(1); return primary; }
+
+    // Retry independently when anything is missing or implausibly truncated.
+    passOffset = 0.72;
+    passShare = 0.28;
+    const fallback = await recognizePass(PSM.SPARSE_TEXT);
+    onProgress?.(1);
+    return mergeScaleReadings(primary, fallback);
   } finally {
     await worker.terminate();
   }

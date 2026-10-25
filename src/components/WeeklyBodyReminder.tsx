@@ -2,7 +2,7 @@ import React from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { BodyMeasurement } from "../types";
 import { bodyMetrics, BodyMetricKey, isBodyMeasurement } from "../utils/bodyMeasurements";
-import { recognizeScaleScreenshots } from "../utils/scaleScreenshotOcr";
+import { recognizeScaleScreenshots, scaleScreenshotMetricKeys } from "../utils/scaleScreenshotOcr";
 import { useTheme } from "../theme";
 
 export function WeeklyBodyReminder({ visible, onClose, onSave }: {
@@ -16,19 +16,34 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
   const [recognizedCount, setRecognizedCount] = React.useState(0);
   const [selectedCount, setSelectedCount] = React.useState(0);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const replacePhotoValues = (current: Partial<Record<BodyMetricKey,string>>, parsed: Partial<Record<BodyMetricKey,unknown>> = {}) => {
+    const next = {...current};
+    for (const key of [...scaleScreenshotMetricKeys, "idealWeightKg" as const]) delete next[key];
+    for (const [key,value] of Object.entries(parsed)) if (value != null) next[key as BodyMetricKey] = String(value);
+    return next;
+  };
   const processScreenshots = async (files: File[]) => {
     if (!files.length) return;
+    if (files.length !== 3) {
+      setSelectedCount(files.length); setRecognizedCount(0);
+      setValues(current => replacePhotoValues(current));
+      setStatus(`Vyber naraz presne 3 screenshoty. Teraz si vybral ${files.length}.`);
+      return;
+    }
     setSelectedCount(files.length); setRecognizedCount(0);
-    setWorking(true); setStatus(`Načítavam ${files.length} screenshot${files.length === 1 ? "" : "y"}…`);
+    setWorking(true); setStatus(`Načítavam ${files.length} screenshoty…`);
     try {
       const images = await Promise.all(files.map(file => new Promise<string>((resolve,reject) => {
         const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file);
       })));
       const parsed = await recognizeScaleScreenshots(images, progress => setStatus(`Rozpoznávam údaje… ${Math.round(progress*100)} %`));
-      setValues(current => ({...current,...Object.fromEntries(Object.entries(parsed).map(([key,value])=>[key,String(value)]))}));
-      const count = Object.keys(parsed).length;
+      setValues(current => replacePhotoValues(current, parsed));
+      const count = scaleScreenshotMetricKeys.filter(key => parsed[key] != null).length;
       setRecognizedCount(count);
-      setStatus(count ? `Hotovo: načítal som ${count} hodnôt. Skontroluj ich a doplň obvod pása.` : "Hodnoty sa nepodarilo spoľahlivo rozpoznať. Zadaj ich ručne.");
+      const missing = scaleScreenshotMetricKeys.filter(key => parsed[key] == null);
+      setStatus(missing.length === 0
+        ? `Načítané ${count}/${scaleScreenshotMetricKeys.length}. Všetky údaje z fotiek sú vyplnené. Doplň iba obvod pása.`
+        : `Načítané ${count}/${scaleScreenshotMetricKeys.length}. Chýbajúce polia doplň ručne; aplikácia nedovolí uložiť neúplné čítanie.`);
     } catch (error) {
       console.log("Scale screenshot OCR failed", error);
       setStatus("Rozpoznanie sa nepodarilo. Skús ostrejší screenshot alebo zadaj hmotnosť ručne.");
@@ -42,6 +57,11 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
     fileInputRef.current?.click();
   };
   const save = () => {
+    const missingRequired = selectedCount === 3 && scaleScreenshotMetricKeys.some(key => !values[key]?.trim());
+    if (working || missingRequired) {
+      setStatus("Ešte chýba údaj z fotografie. Doplň zvýraznené pole ručne alebo nahraj 3 screenshoty znova.");
+      return;
+    }
     const entry: BodyMeasurement = {id:`body-${date}`,date,weightKg:NaN};
     for (const field of bodyMetrics) {
       const raw = values[field.key]?.trim();
@@ -60,7 +80,7 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
     content:{padding:16,gap:12},uploadCard:{backgroundColor:colors.highlightSoft,borderRadius:18,borderWidth:2,borderStyle:"dashed",borderColor:colors.highlight,padding:14,gap:9},uploadTitle:{color:colors.text,fontWeight:"900",fontSize:17},text:{color:colors.textMuted,lineHeight:20},hint:{color:colors.textMuted,fontSize:12,lineHeight:17},
     label:{color:colors.textMuted,fontSize:13,fontWeight:"700"},input:{backgroundColor:colors.inputSurface,color:colors.text,padding:12,borderRadius:10,borderWidth:1,borderColor:colors.inputBorder},filledInput:{borderWidth:2,borderColor:colors.success},
     primary:{minHeight:50,borderRadius:14,backgroundColor:colors.highlight,alignItems:"center",justifyContent:"center",paddingHorizontal:12},primaryText:{fontWeight:"900",color:"#fff",textAlign:"center"},uploadButton:{backgroundColor:"#17110d"},
-    statusCard:{padding:12,borderRadius:12,backgroundColor:colors.highlightSoft,borderLeftWidth:5,borderLeftColor:colors.highlight},statusSuccess:{backgroundColor:"rgba(80,180,120,0.16)",borderLeftColor:colors.success},statusText:{color:colors.text,fontWeight:"800",lineHeight:19},
+    statusCard:{padding:12,borderRadius:12,backgroundColor:colors.highlightSoft,borderLeftWidth:5,borderLeftColor:colors.highlight},statusSuccess:{backgroundColor:"rgba(80,180,120,0.16)",borderLeftColor:colors.success},statusText:{color:colors.text,fontWeight:"800",lineHeight:19},missingInput:{borderWidth:2,borderColor:"#ff5a5f"},
     secondary:{minHeight:44,alignItems:"center",justifyContent:"center",paddingHorizontal:10},secondaryText:{color:colors.highlight,fontWeight:"800",textAlign:"center"},grid:{flexDirection:"row",flexWrap:"wrap",gap:10},field:{width:"48%",minWidth:130,flexGrow:1,gap:5},privacy:{alignSelf:"flex-start",backgroundColor:colors.chipSurface,paddingVertical:6,paddingHorizontal:10,borderRadius:999},privacyText:{color:colors.chipText,fontSize:12,fontWeight:"700"}
   });
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={styles.backdrop}><View style={styles.card}><ScrollView>
@@ -74,15 +94,15 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
     <View style={styles.uploadCard}>
       <Text style={styles.uploadTitle}>📸 Nahraj presne tieto 3 obrazovky</Text>
       <Text style={styles.text}>Vyber ich naraz. Údaje nájdem podľa názvov, takže môžu byť v ľubovoľnom poradí.</Text>
-      {Platform.OS === "web" ? <input ref={fileInputRef} type="file" accept="image/*" multiple aria-label="Tri screenshoty z osobnej váhy" style={{display:"none"}} onChange={event=>void processScreenshots(Array.from(event.currentTarget.files??[]).slice(0,3))}/> : null}
+      {Platform.OS === "web" ? <input ref={fileInputRef} type="file" accept="image/*" multiple aria-label="Tri screenshoty z osobnej váhy" style={{display:"none"}} onChange={event=>void processScreenshots(Array.from(event.currentTarget.files??[]))}/> : null}
       <Pressable accessibilityRole="button" disabled={working} onPress={chooseScreenshots} style={[styles.primary,styles.uploadButton,working&&{opacity:0.6}]}><Text style={styles.primaryText}>{working?"Rozpoznávam údaje…":"Vybrať 3 screenshoty"}</Text></Pressable>
       <View style={styles.privacy}><Text style={styles.privacyText}>🔒 Fotky ostávajú v tomto zariadení</Text></View>
       {selectedCount ? <Text style={styles.hint}>Vybrané fotografie: {selectedCount}/3</Text> : null}
     </View>
-    {status?<View style={[styles.statusCard,recognizedCount>0&&styles.statusSuccess]}><Text accessibilityRole="alert" style={styles.statusText}>{recognizedCount>0?"✓ ":""}{status}</Text></View>:null}
+    {status?<View style={[styles.statusCard,recognizedCount===scaleScreenshotMetricKeys.length&&styles.statusSuccess]}><Text accessibilityRole="alert" style={styles.statusText}>{recognizedCount===scaleScreenshotMetricKeys.length?"✓ ":""}{status}</Text></View>:null}
     <View><Text style={styles.label}>Dátum</Text><TextInput accessibilityLabel="Dátum merania" value={date} onChangeText={setDate} style={styles.input}/></View>
-    <View style={styles.grid}>{bodyMetrics.map(field=><View key={field.key} style={styles.field}><Text style={styles.label}>{field.label}{field.key==="waistCm"?" · ručne":""}{field.unit?` (${field.unit})`:""}</Text><TextInput accessibilityLabel={`Pripomienka ${field.label}`} value={values[field.key]??""} onChangeText={value=>setValues(current=>({...current,[field.key]:value}))} keyboardType="decimal-pad" style={[styles.input,values[field.key]?styles.filledInput:null]}/></View>)}</View>
-    <Pressable accessibilityRole="button" onPress={save} style={styles.primary}><Text style={styles.primaryText}>Skontrolované · uložiť meranie</Text></Pressable>
+    <View style={styles.grid}>{bodyMetrics.map(field=>{const missing=selectedCount===3&&scaleScreenshotMetricKeys.includes(field.key)&&!values[field.key]?.trim(); return <View key={field.key} style={styles.field}><Text style={styles.label}>{field.label}{field.key==="waistCm"?" · ručne":field.key==="idealWeightKg"?" · voliteľné":""}{field.unit?` (${field.unit})`:""}</Text><TextInput accessibilityLabel={`Pripomienka ${field.label}`} value={values[field.key]??""} onChangeText={value=>setValues(current=>({...current,[field.key]:value}))} keyboardType="decimal-pad" style={[styles.input,values[field.key]?styles.filledInput:null,missing?styles.missingInput:null]}/></View>})}</View>
+    <Pressable accessibilityRole="button" disabled={working} onPress={save} style={[styles.primary,working&&{opacity:0.6}]}><Text style={styles.primaryText}>Skontrolované · uložiť meranie</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={onClose} style={styles.secondary}><Text style={styles.secondaryText}>Pripomenúť neskôr</Text></Pressable>
     </View>
   </ScrollView></View></View></Modal>;

@@ -22,7 +22,7 @@ const { getWorkoutElapsed, transitionWorkoutClock, formatWorkoutTime } = require
 const { getRememberedAccessory } = require('../src/utils/exerciseMemory.ts');
 const { getBodyWeight, getProgressSummary, isPersonalData } = require('../src/utils/personalData.ts');
 const { isBodyMeasurement, isBodyMeasurementDue, bodyMetrics } = require('../src/utils/bodyMeasurements.ts');
-const { parseScaleScreenshotText } = require('../src/utils/scaleScreenshotOcr.ts');
+const { parseScaleScreenshotText, mergeScaleReadings, scaleScreenshotMetricKeys } = require('../src/utils/scaleScreenshotOcr.ts');
 const { estimateSessionCalories, estimateWorkoutCalories } = require('../src/utils/calories.ts');
 const { parseMachineDrafts } = require('../src/utils/machineDraft.ts');
 const { applySetTarget } = require('../src/utils/setTargets.ts');
@@ -78,6 +78,17 @@ test('smart scale screenshots parse Slovak labels, decimal commas, and two-page 
     waterPercent:55.2,boneMassKg:2.92,bodyAge:35,idealWeightKg:71.4});
   assert.deepEqual(parseScaleScreenshotText('Skóre tela 71,65 kg BMI 21,6'),{weightKg:71.65,bmi:21.6});
   assert.deepEqual(parseScaleScreenshotText('text bez hodnôt'),{});
+  const currentScreenshots = parseScaleScreenshotText(`Skóre tela 80 7345 kg Voda 54,5%
+    Bazálny metabolizmus 1 365 kcal Viscerálny tuk 13 BMI 221 Telesný tuk 20,4%
+    Svalstvo 55,47kg Bielkoviny 209% Kostná hmota 297kg Vekš5 Vek:`);
+  assert.deepEqual(currentScreenshots,{bodyScore:80,weightKg:73.45,basalMetabolismKcal:1365,visceralFat:13,
+    bmi:22.1,bodyFatPercent:20.4,muscleMassKg:55.47,waterPercent:54.5,proteinPercent:20.9,
+    boneMassKg:2.97,bodyAge:35});
+  assert.equal(scaleScreenshotMetricKeys.every(key => currentScreenshots[key] != null),true);
+  assert.deepEqual(mergeScaleReadings(
+    {...currentScreenshots,bodyScore:10,visceralFat:1,muscleMassKg:55.4,boneMassKg:2.9,basalMetabolismKcal:undefined},
+    currentScreenshots
+  ),currentScreenshots);
 });
 
 test('progression requires different days at the same weight, and respects a long break', () => {
