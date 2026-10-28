@@ -15,6 +15,7 @@ import { WorkoutClockBar } from "./src/components/WorkoutClockBar";
 import { getWorkoutElapsed, transitionWorkoutClock } from "./src/utils/workoutClock";
 import { SideMenu } from "./src/components/SideMenu";
 import { WeeklyBodyReminder } from "./src/components/WeeklyBodyReminder";
+import { InstallAppBanner } from "./src/components/InstallAppBanner";
 import { CameraPrepScreen } from "./src/screens/CameraPrepScreen";
 import { HistoryScreen } from "./src/screens/HistoryScreen";
 import { ProgressScreen } from "./src/screens/ProgressScreen";
@@ -1321,7 +1322,7 @@ function AppShell() {
             <Text style={styles.headerSubtitle}>{getTabLabel(activeTab)}</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>1.4.5</Text>
+            <Text style={styles.headerBadgeText}>1.5.0</Text>
           </View>
         </View>
       ) : null}
@@ -1332,6 +1333,7 @@ function AppShell() {
           onFinish={finishTraining} />
       ) : null}
       <View style={styles.container}>{content}</View>
+      <InstallAppBanner />
       {toastMessage ? (
         <View style={styles.toastOverlay}>
           <View style={styles.toastCard}>

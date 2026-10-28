@@ -76,6 +76,30 @@ CasaOS sync API je schovane pod rovnakou adresou:
 http://192.168.31.193:8088/sync/gym80
 ```
 
+## Inštalácia z Chrome (PWA)
+
+Web obsahuje manifest, ikony 192/512 px, režim `standalone` a tlačidlo inštalácie, ktoré sa zobrazí po udalosti `beforeinstallprompt`.
+Chrome vyžaduje dôveryhodné HTTPS. Na adrese `http://100.x.x.x:8088` bude inštalácia stále nedostupná.
+
+Pre súkromný prístup možno použiť Tailscale Serve na CasaOS:
+
+```bash
+tailscale serve status
+tailscale serve --bg --https=8443 http://127.0.0.1:8088
+```
+
+Pred zmenou skontroluj existujúce nastavenie Serve a prípadnú obsadenosť portu 8443.
+Príkaz musí bežať v hostiteľovi alebo v Tailscale kontajneri, z ktorého je dostupný port 8088.
+Ak HTTPS/MagicDNS ešte nie je povolené, Tailscale môže vyžiadať potvrdenie v jeho administračnej konzole.
+Nepoužívaj Funnel; Gym80 má zostať dostupný iba v súkromnej sieti Tailscale.
+
+Potom otvor adresu `https://<názov-zariadenia>.<tailnet>.ts.net:8443` vypísanú príkazom a v Chrome zvoľ **Inštalovať**.
+Na novej HTTPS adrese sa história načíta z rovnakého CasaOS servera. Neodoslané lokálne koncepty zostávajú viazané na pôvodnú adresu; rozpracovaný tréning dokonči pred prechodom.
+
+Service worker neukladá tréningy, merania, API odpovede ani aplikačné balíky do cache. Pri výpadku spojenia zobrazí iba stránku s možnosťou skúsiť pripojenie znova. Úpravy aplikácie sa načítajú pri ďalšom spustení/obnovení stránky.
+
+Overenie: `npm run test:pwa` a `npm run build:web`.
+
 ## Dalsie kroky
 
 1. Pridat realnu navigaciu a formular pre zapis treningu.
