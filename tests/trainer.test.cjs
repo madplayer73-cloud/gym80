@@ -22,7 +22,7 @@ const { getWorkoutElapsed, transitionWorkoutClock, formatWorkoutTime } = require
 const { getRememberedAccessory } = require('../src/utils/exerciseMemory.ts');
 const { getBodyWeight, getProgressSummary, isPersonalData } = require('../src/utils/personalData.ts');
 const { isBodyMeasurement, isBodyMeasurementDue, bodyMetrics } = require('../src/utils/bodyMeasurements.ts');
-const { parseScaleScreenshotText, mergeScaleReadings, scaleScreenshotMetricKeys, scaleReadingRegions, scaleNumericRegions } = require('../src/utils/scaleScreenshotOcr.ts');
+const { parseScaleScreenshotText, mergeScaleReadings, scaleScreenshotMetricKeys, scaleReadingRegions, scaleNumericRegions, findScaleHeaderRegions } = require('../src/utils/scaleScreenshotOcr.ts');
 const { estimateSessionCalories, estimateWorkoutCalories } = require('../src/utils/calories.ts');
 const { parseMachineDrafts } = require('../src/utils/machineDraft.ts');
 const { applySetTarget } = require('../src/utils/setTargets.ts');
@@ -127,6 +127,20 @@ test('numeric verification crops misrecognized age glyphs without guessing their
   assert.equal(regions[0].key,'bodyAge');
   assert.deepEqual(regions[0].rectangle,{left:126,top:196,width:27,height:28});
   assert.equal(parseScaleScreenshotText(text).bodyAge,undefined);
+});
+
+test('header values can be located without OCR recognizing the title or weight line', () => {
+  for(const scale of [1,2]) {
+    const width=576*scale,height=1280*scale;
+    const pixels=new Uint8ClampedArray(width*height*4).fill(255);
+    const ink=(x0,y0,x1,y1)=>{for(let y=y0*scale;y<y1*scale;y++)for(let x=x0*scale;x<x1*scale;x++){const i=(y*width+x)*4;pixels[i]=pixels[i+1]=pixels[i+2]=20;}};
+    assert.deepEqual(findScaleHeaderRegions(pixels,width,height),[]);
+    ink(240,175,335,243); ink(254,276,320,290);
+    const regions=findScaleHeaderRegions(pixels,width,height);
+    assert.deepEqual(regions.map(region=>region.key),['bodyScore','weightKg']);
+    for(const region of regions) assert.ok(region.rectangle.width>0 && region.rectangle.height>0);
+    assert.ok(regions[0].rectangle.top+regions[0].rectangle.height<regions[1].rectangle.top);
+  }
 });
 
 test('progression requires different days at the same weight, and respects a long break', () => {

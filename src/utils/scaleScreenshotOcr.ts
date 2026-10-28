@@ -2,6 +2,34 @@ import { BodyMeasurement } from "../types";
 import type { Line, PSM, Rectangle } from "tesseract.js";
 
 type ParsedScaleData = Partial<Omit<BodyMeasurement, "id" | "date">>;
+type NumericRegion = {key: keyof ParsedScaleData; rectangle: Rectangle};
+
+// Locate the large score and the small weight immediately below it from ink
+// geometry, without depending on OCR reading the faint "Skóre tela" title.
+export function findScaleHeaderRegions(pixels: Uint8ClampedArray, width: number, height: number): NumericRegion[] {
+  const left=Math.floor(width*0.22), right=Math.ceil(width*0.78);
+  const bands: Array<{top:number;bottom:number;left:number;right:number}>=[];
+  let band: typeof bands[number] | undefined;
+  for(let y=0;y<Math.floor(height*0.48);y++) {
+    let x0=right,x1=left,count=0;
+    for(let x=left;x<right;x++) {
+      const i=(y*width+x)*4;
+      if(pixels[i]<150 && pixels[i+1]<150 && pixels[i+2]<150 && pixels[i+3]>128) {count++;x0=Math.min(x0,x);x1=Math.max(x1,x);}
+    }
+    if(count>=2) {
+      if(!band || y-band.bottom>3) {band={top:y,bottom:y,left:x0,right:x1};bands.push(band);}
+      else {band.bottom=y;band.left=Math.min(band.left,x0);band.right=Math.max(band.right,x1);}
+    }
+  }
+  const score=bands.filter(b=>b.bottom-b.top>=height*0.035 && b.bottom-b.top<=height*0.14)
+    .sort((a,b)=>(b.bottom-b.top)-(a.bottom-a.top))[0];
+  if(!score) return [];
+  const box=(b:typeof score):Rectangle=>({left:Math.max(0,b.left-6),top:Math.max(0,b.top-6),width:b.right-b.left+13,height:b.bottom-b.top+13});
+  const result:NumericRegion[]=[{key:"bodyScore",rectangle:box(score)}];
+  const weight=bands.find(b=>b.top>score.bottom+4 && b.top<score.bottom+height*0.12 && b.bottom-b.top>=height*0.006 && b.bottom-b.top<height*0.03);
+  if(weight) result.push({key:"weightKg",rectangle:box(weight)});
+  return result;
+}
 
 // Values present on the three regular Mi Fitness scale screenshots. Waist is
 // deliberately manual; ideal weight appears only when the final page is lower.
@@ -156,7 +184,7 @@ export function scaleReadingRegions(lines: Line[]): Array<{ rectangle: Rectangle
   return regions;
 }
 
-export async function recognizeScaleScreenshots(images: string[], onProgress?: (progress: number) => void) {
+export async function recognizeScaleScreenshots(images: string[], onProgress?: (progress: number) => void, headers: NumericRegion[][] = []) {
   const { createWorker, PSM } = await import("tesseract.js");
   let activeImageIndex = 0;
   let completed = 0;
@@ -192,10 +220,16 @@ export async function recognizeScaleScreenshots(images: string[], onProgress?: (
       const rows = await readRegions(PSM.SINGLE_LINE);
       // Also run when both first reads missed the same field entirely.
       await worker.setParameters({tessedit_pageseg_mode: PSM.SPARSE_TEXT});
-      const sparse = await worker.recognize(images[activeImageIndex]);
+      const sparse = await worker.recognize(images[activeImageIndex],{}, {text:true,blocks:true});
       const verified = mergeScaleReadings(primary, rows, parseScaleScreenshotText(sparse.data.text));
       // Read the value pixels without Slovak words or reference paragraphs.
-      const numericRegions = scaleNumericRegions(lines);
+      const headerRegions=headers[activeImageIndex]??[];
+      const detected = scaleNumericRegions(lines);
+      const sparseLines=(sparse.data.blocks??[]).flatMap(block=>block.paragraphs.flatMap(paragraph=>paragraph.lines));
+      for(const region of scaleNumericRegions(sparseLines)) {
+        if(!detected.some(existing=>existing.key===region.key)) detected.push(region);
+      }
+      const numericRegions = [...detected.filter(region=>!headerRegions.some(h=>h.key===region.key)),...headerRegions];
       const numericReadings: ParsedScaleData[] = [];
       for (const mode of [PSM.SINGLE_LINE, PSM.RAW_LINE]) {
         const reading: ParsedScaleData = {};
@@ -230,11 +264,10 @@ export async function recognizeScaleScreenshots(images: string[], onProgress?: (
 
 // Original Android screenshots are often much larger than the copies sent in
 // chat. Fix the input scale before layout detection; viewport size is unrelated.
-export async function normalizeScaleScreenshot(source: string): Promise<string> {
+export async function normalizeScaleScreenshot(source: string): Promise<{image:string;headerRegions:NumericRegion[]}> {
   const image = new Image();
   image.src = source;
   await image.decode();
-  if (image.naturalWidth === 576) return source;
   const canvas = document.createElement("canvas");
   canvas.width = 576;
   canvas.height = Math.round(image.naturalHeight * 576 / image.naturalWidth);
@@ -245,5 +278,6 @@ export async function normalizeScaleScreenshot(source: string): Promise<string> 
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(image,0,0,canvas.width,canvas.height);
-  return canvas.toDataURL("image/png");
+  const headerRegions=findScaleHeaderRegions(context.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height);
+  return {image:image.naturalWidth===576?source:canvas.toDataURL("image/png"),headerRegions};
 }

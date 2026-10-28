@@ -37,9 +37,9 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
       const images = await Promise.all(files.map(file => new Promise<string>((resolve,reject) => {
         const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file);
       })));
-      const prepared: string[] = [];
+      const prepared: Awaited<ReturnType<typeof normalizeScaleScreenshot>>[] = [];
       for (const source of images) prepared.push(await normalizeScaleScreenshot(source));
-      const parsed = await recognizeScaleScreenshots(prepared, progress => setStatus(`Rozpoznávam údaje… ${Math.round(progress*100)} %`));
+      const parsed = await recognizeScaleScreenshots(prepared.map(item=>item.image), progress => setStatus(`Rozpoznávam údaje… ${Math.round(progress*100)} %`),prepared.map(item=>item.headerRegions));
       setValues(current => replacePhotoValues(current, parsed));
       const count = scaleScreenshotMetricKeys.filter(key => parsed[key] != null).length;
       setRecognizedCount(count);
