@@ -31,6 +31,7 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
       return;
     }
     setSelectedCount(files.length); setRecognizedCount(0);
+    setValues(current => replacePhotoValues(current));
     setWorking(true); setStatus(`Načítavam ${files.length} screenshoty…`);
     try {
       const images = await Promise.all(files.map(file => new Promise<string>((resolve,reject) => {
@@ -42,11 +43,12 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
       setRecognizedCount(count);
       const missing = scaleScreenshotMetricKeys.filter(key => parsed[key] == null);
       setStatus(missing.length === 0
-        ? `Načítané ${count}/${scaleScreenshotMetricKeys.length}. Všetky údaje z fotiek sú vyplnené. Doplň iba obvod pása.`
-        : `Načítané ${count}/${scaleScreenshotMetricKeys.length}. Chýbajúce polia doplň ručne; aplikácia nedovolí uložiť neúplné čítanie.`);
+        ? `Načítané ${count}/${scaleScreenshotMetricKeys.length}. Hodnoty sa zhodli pri opakovanom čítaní. Porovnaj ich s fotkami, skontroluj dátum a doplň obvod pása.`
+        : `Overené ${count}/${scaleScreenshotMetricKeys.length}. Nejasné alebo rozdielne výsledky ostali prázdne. Doplň zvýraznené polia podľa fotiek a skontroluj dátum.`);
     } catch (error) {
       console.log("Scale screenshot OCR failed", error);
-      setStatus("Rozpoznanie sa nepodarilo. Skús ostrejší screenshot alebo zadaj hmotnosť ručne.");
+      setValues(current => replacePhotoValues(current));
+      setStatus("Fotky sa nepodarilo spoľahlivo prečítať alebo obsahujú rozdielne merania. Vyber 3 snímky jedného merania znova, prípadne doplň údaje ručne.");
     } finally { setWorking(false); }
   };
   const chooseScreenshots = () => {

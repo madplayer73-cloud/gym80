@@ -88,8 +88,20 @@ test('smart scale screenshots parse Slovak labels, decimal commas, and two-page 
   assert.equal(scaleScreenshotMetricKeys.every(key => currentScreenshots[key] != null),true);
   assert.deepEqual(mergeScaleReadings(
     {...currentScreenshots,bodyScore:10,visceralFat:1,muscleMassKg:55.4,boneMassKg:2.9,basalMetabolismKcal:undefined},
+    currentScreenshots,
     currentScreenshots
   ),currentScreenshots);
+});
+
+test('scale import never guesses between conflicting reads or imports reference BMR', () => {
+  assert.deepEqual(mergeScaleReadings({visceralFat:1,bodyScore:10},{visceralFat:13,bodyScore:80}),{});
+  assert.deepEqual(mergeScaleReadings({muscleMassKg:55.4},{muscleMassKg:55.47},{muscleMassKg:55.48}),{});
+  assert.deepEqual(mergeScaleReadings({basalMetabolismKcal:1365},{}),{});
+  assert.deepEqual(mergeScaleReadings({visceralFat:1},{visceralFat:1},{visceralFat:13}),{visceralFat:1});
+  assert.deepEqual(parseScaleScreenshotText('Váš štandardný bazálny metabolizmus je 1469 kCal. Hladina viscerálneho tuku sa musí znížiť na menej ako 9.'),{});
+  assert.deepEqual(parseScaleScreenshotText('Bazálny metabolizmus 1 365 kcal\nVáš štandardný bazálny metabolizmus je 1469 kCal.'),{basalMetabolismKcal:1365});
+  assert.deepEqual(parseScaleScreenshotText('Svalstvo 55,477 kg'),{});
+  assert.deepEqual(parseScaleScreenshotText('Hmotnosť 100 kg Svalstvo 100 kg'),{weightKg:100,muscleMassKg:100});
 });
 
 test('progression requires different days at the same weight, and respects a long break', () => {
