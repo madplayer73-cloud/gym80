@@ -98,16 +98,19 @@ export function scaleReadingRegions(lines: Line[]): Array<{ rectangle: Rectangle
     if (!score && (!match || /[a-z]{3}/.test(text.slice(0, match.index)))) continue;
     const firstWord = line.words.find(word => /^(?:skore|bazalny|visceralny|bmi|telesny|svalstvo|voda|bielkoviny|kostna|idealna|vek)/.test(plain(word.text)));
     if (!firstWord) continue;
-    const left = Math.max(0, firstWord.bbox.x0 - 4);
+    let left = Math.max(0, firstWord.bbox.x0 - 4);
     const top = Math.max(0, line.bbox.y0 - 4);
     let right = line.bbox.x1;
     let bottom = line.bbox.y1;
     if (score) {
       // Score is large and sits between its title and the weight, independent
       // of where this panel appears in the screenshot.
-      const weight = lines.find(item => item.bbox.y0 > line.bbox.y1 && item.bbox.y0 < line.bbox.y1 + 300 && /\d.*kg/i.test(item.text));
+      const weight = lines.find(item => item.bbox.y0 > line.bbox.y1 && item.bbox.y0 < line.bbox.y1 + (line.bbox.y1 - line.bbox.y0) * 12 && /\d.*kg/i.test(item.text));
       if (!weight) continue;
-      right = Math.max(right, weight.bbox.x1);
+      // Large score digits are wider than the title. Never crop to title width.
+      const sidePadding = (line.bbox.x1 - firstWord.bbox.x0) / 2;
+      left = Math.max(0, Math.min(firstWord.bbox.x0, weight.bbox.x0) - sidePadding);
+      right = Math.max(right, weight.bbox.x1) + sidePadding;
       bottom = weight.bbox.y1;
     }
     regions.push({score, rectangle: {left, top, width: right - left + 4, height: bottom - top + 4}});

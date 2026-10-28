@@ -22,7 +22,7 @@ const { getWorkoutElapsed, transitionWorkoutClock, formatWorkoutTime } = require
 const { getRememberedAccessory } = require('../src/utils/exerciseMemory.ts');
 const { getBodyWeight, getProgressSummary, isPersonalData } = require('../src/utils/personalData.ts');
 const { isBodyMeasurement, isBodyMeasurementDue, bodyMetrics } = require('../src/utils/bodyMeasurements.ts');
-const { parseScaleScreenshotText, mergeScaleReadings, scaleScreenshotMetricKeys } = require('../src/utils/scaleScreenshotOcr.ts');
+const { parseScaleScreenshotText, mergeScaleReadings, scaleScreenshotMetricKeys, scaleReadingRegions } = require('../src/utils/scaleScreenshotOcr.ts');
 const { estimateSessionCalories, estimateWorkoutCalories } = require('../src/utils/calories.ts');
 const { parseMachineDrafts } = require('../src/utils/machineDraft.ts');
 const { applySetTarget } = require('../src/utils/setTargets.ts');
@@ -102,6 +102,21 @@ test('scale import never guesses between conflicting reads or imports reference 
   assert.deepEqual(parseScaleScreenshotText('Bazálny metabolizmus 1 365 kcal\nVáš štandardný bazálny metabolizmus je 1469 kCal.'),{basalMetabolismKcal:1365});
   assert.deepEqual(parseScaleScreenshotText('Svalstvo 55,477 kg'),{});
   assert.deepEqual(parseScaleScreenshotText('Hmotnosť 100 kg Svalstvo 100 kg'),{weightKg:100,muscleMassKg:100});
+});
+
+test('score verification includes wide digits and scales with screenshot resolution', () => {
+  const line = (text,x0,y0,x1,y1) => ({text,bbox:{x0,y0,x1,y1},words:[{text,bbox:{x0,y0,x1,y1}}]});
+  for (const scale of [1,2,3]) {
+    const rows = [line('Skóre tela',245*scale,200*scale,330*scale,220*scale),
+      line('73,45 kg',240*scale,345*scale,335*scale,365*scale),
+      line('Váš štandardný bazálny metabolizmus',90*scale,400*scale,500*scale,420*scale)];
+    const regions=scaleReadingRegions(rows);
+    assert.equal(regions.length,1);
+    const {rectangle}=regions[0];
+    assert.ok(rectangle.left < 230*scale);
+    assert.ok(rectangle.left+rectangle.width > 345*scale);
+    assert.ok(rectangle.top+rectangle.height >= 365*scale);
+  }
 });
 
 test('progression requires different days at the same weight, and respects a long break', () => {
