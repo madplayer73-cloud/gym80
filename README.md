@@ -85,15 +85,15 @@ Pre súkromný prístup možno použiť Tailscale Serve na CasaOS:
 
 ```bash
 tailscale serve status
-tailscale serve --bg --https=8443 http://127.0.0.1:8088
+tailscale serve --bg --https=8444 http://127.0.0.1:8088
 ```
 
-Pred zmenou skontroluj existujúce nastavenie Serve a prípadnú obsadenosť portu 8443.
+Pred zmenou skontroluj existujúce nastavenie Serve a prípadnú obsadenosť portu 8444.
 Príkaz musí bežať v hostiteľovi alebo v Tailscale kontajneri, z ktorého je dostupný port 8088.
 Ak HTTPS/MagicDNS ešte nie je povolené, Tailscale môže vyžiadať potvrdenie v jeho administračnej konzole.
 Nepoužívaj Funnel; Gym80 má zostať dostupný iba v súkromnej sieti Tailscale.
 
-Potom otvor adresu `https://<názov-zariadenia>.<tailnet>.ts.net:8443` vypísanú príkazom a v Chrome zvoľ **Inštalovať**.
+Potom otvor adresu `https://<názov-zariadenia>.<tailnet>.ts.net:8444` vypísanú príkazom a v Chrome zvoľ **Inštalovať**.
 Na novej HTTPS adrese sa história načíta z rovnakého CasaOS servera. Neodoslané lokálne koncepty zostávajú viazané na pôvodnú adresu; rozpracovaný tréning dokonči pred prechodom.
 
 Service worker neukladá tréningy, merania, API odpovede ani aplikačné balíky do cache. Pri výpadku spojenia zobrazí iba stránku s možnosťou skúsiť pripojenie znova. Úpravy aplikácie sa načítajú pri ďalšom spustení/obnovení stránky.
