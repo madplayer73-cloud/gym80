@@ -2,7 +2,7 @@ import React from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { BodyMeasurement } from "../types";
 import { bodyMetrics, BodyMetricKey, isBodyMeasurement } from "../utils/bodyMeasurements";
-import { recognizeScaleScreenshots, scaleScreenshotMetricKeys } from "../utils/scaleScreenshotOcr";
+import { normalizeScaleScreenshot, recognizeScaleScreenshots, scaleScreenshotMetricKeys } from "../utils/scaleScreenshotOcr";
 import { useTheme } from "../theme";
 
 export function WeeklyBodyReminder({ visible, onClose, onSave }: {
@@ -37,7 +37,9 @@ export function WeeklyBodyReminder({ visible, onClose, onSave }: {
       const images = await Promise.all(files.map(file => new Promise<string>((resolve,reject) => {
         const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file);
       })));
-      const parsed = await recognizeScaleScreenshots(images, progress => setStatus(`Rozpoznávam údaje… ${Math.round(progress*100)} %`));
+      const prepared: string[] = [];
+      for (const source of images) prepared.push(await normalizeScaleScreenshot(source));
+      const parsed = await recognizeScaleScreenshots(prepared, progress => setStatus(`Rozpoznávam údaje… ${Math.round(progress*100)} %`));
       setValues(current => replacePhotoValues(current, parsed));
       const count = scaleScreenshotMetricKeys.filter(key => parsed[key] != null).length;
       setRecognizedCount(count);

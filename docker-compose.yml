@@ -5,7 +5,7 @@ services:
       args:
         EXPO_PUBLIC_CLOUD_AUTH: "pocketbase-single"
         EXPO_PUBLIC_POCKETBASE_URL: "/pb"
-    image: gym80-tracker:1.4.3
+    image: gym80-tracker:1.4.4
     container_name: gym80-tracker
     restart: unless-stopped
     ports:

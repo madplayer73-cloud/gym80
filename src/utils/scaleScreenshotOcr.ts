@@ -88,6 +88,44 @@ export function mergeScaleReadings(...readings: ParsedScaleData[]): ParsedScaleD
 const plain = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const rowLabel = /\b(?:bazalny\s+metabolizmus|visceralny\s+tuk|bmi|telesny\s+tuk|svalstvo|voda|bielkoviny|kostna\s+hmota|idealna\s+vaha|vek(?=[\dsš\s]))/i;
 
+const numericLabels: Array<[keyof ParsedScaleData, string]> = [
+  ["basalMetabolismKcal","bazalnymetabolizmus"], ["visceralFat","visceralnytuk"],
+  ["bmi","bmi"], ["bodyFatPercent","telesnytuk"], ["muscleMassKg","svalstvo"],
+  ["waterPercent","voda"], ["proteinPercent","bielkoviny"], ["boneMassKg","kostnahmota"],
+  ["bodyAge","vek"], ["idealWeightKg","idealnavaha"]
+];
+
+export function scaleNumericRegions(lines: Line[]): Array<{key: keyof ParsedScaleData; rectangle: Rectangle}> {
+  const regions: Array<{key: keyof ParsedScaleData; rectangle: Rectangle}> = [];
+  for (const line of lines) {
+    const symbols = line.words.flatMap(word => word.symbols ?? []);
+    const text = symbols.map(symbol => plain(symbol.text)).join("");
+    for (const [key,label] of numericLabels) {
+      const start = text.indexOf(label);
+      if (start < 0 || /[a-z]{3}/.test(text.slice(0,start))) continue;
+      const from = start + label.length;
+      // Include OCR substitutions only to locate the image region. Their
+      // letters are never converted into invented numerical values.
+      const token = text.slice(from).match(/^[0-9.,oosšó]+/i)?.[0];
+      if (!token) continue;
+      const digits = symbols.slice(from,from+token.length);
+      const x0 = Math.min(...digits.map(d=>d.bbox.x0));
+      const x1 = Math.max(...digits.map(d=>d.bbox.x1));
+      const y0 = Math.min(...digits.map(d=>d.bbox.y0));
+      const y1 = Math.max(...digits.map(d=>d.bbox.y1));
+      regions.push({key,rectangle:{left:Math.max(0,x0-4),top:Math.max(0,y0-4),width:x1-x0+8,height:y1-y0+8}});
+    }
+    if (/skore\s*tela/.test(plain(line.text))) {
+      const weight = lines.find(item=>item.bbox.y0>line.bbox.y1 && /\d.*kg/i.test(item.text));
+      if (!weight) continue;
+      const width = line.bbox.x1-line.bbox.x0;
+      regions.push({key:"bodyScore",rectangle:{left:Math.max(0,line.bbox.x0-width/2),top:line.bbox.y1+4,
+        width:width*2,height:weight.bbox.y0-line.bbox.y1-8}});
+    }
+  }
+  return regions;
+}
+
 export function scaleReadingRegions(lines: Line[]): Array<{ rectangle: Rectangle; score: boolean }> {
   const regions: Array<{ rectangle: Rectangle; score: boolean }> = [];
   for (const line of lines) {
@@ -156,6 +194,26 @@ export async function recognizeScaleScreenshots(images: string[], onProgress?: (
       await worker.setParameters({tessedit_pageseg_mode: PSM.SPARSE_TEXT});
       const sparse = await worker.recognize(images[activeImageIndex]);
       const verified = mergeScaleReadings(primary, rows, parseScaleScreenshotText(sparse.data.text));
+      // Read the value pixels without Slovak words or reference paragraphs.
+      const numericRegions = scaleNumericRegions(lines);
+      const numericReadings: ParsedScaleData[] = [];
+      for (const mode of [PSM.SINGLE_LINE, PSM.RAW_LINE]) {
+        const reading: ParsedScaleData = {};
+        for (const {key,rectangle} of numericRegions) {
+          await worker.setParameters({tessedit_pageseg_mode:key==="bodyScore" && mode===PSM.SINGLE_LINE ? PSM.SINGLE_WORD : mode,tessedit_char_whitelist:"0123456789.,"});
+          const result = await worker.recognize(images[activeImageIndex],{rectangle});
+          const raw = result.data.text.trim().replace(/\s/g,"");
+          if (!/^\d+(?:[.,]\d{1,2})?$/.test(raw)) continue;
+          const value = parseMetricValue(key,raw);
+          const range = validRanges[key]!;
+          if (value>=range[0] && value<=range[1]) reading[key]=value;
+        }
+        numericReadings.push(reading);
+      }
+      await worker.setParameters({tessedit_char_whitelist:""});
+      const numeric = mergeScaleReadings(...numericReadings);
+      for (const {key} of numericRegions) delete verified[key];
+      Object.assign(verified,numeric);
       for (const key of Object.keys(verified) as Array<keyof ParsedScaleData>) {
         if (output[key] != null && output[key] !== verified[key]) throw new Error("Fotografie obsahujú rozdielne merania.");
         output[key] = verified[key];
@@ -168,4 +226,24 @@ export async function recognizeScaleScreenshots(images: string[], onProgress?: (
   } finally {
     await worker.terminate();
   }
+}
+
+// Original Android screenshots are often much larger than the copies sent in
+// chat. Fix the input scale before layout detection; viewport size is unrelated.
+export async function normalizeScaleScreenshot(source: string): Promise<string> {
+  const image = new Image();
+  image.src = source;
+  await image.decode();
+  if (image.naturalWidth === 576) return source;
+  const canvas = document.createElement("canvas");
+  canvas.width = 576;
+  canvas.height = Math.round(image.naturalHeight * 576 / image.naturalWidth);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Nie je možné pripraviť fotografiu.");
+  context.fillStyle = "#fff";
+  context.fillRect(0,0,canvas.width,canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL("image/png");
 }

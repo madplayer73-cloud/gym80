@@ -2,7 +2,7 @@
   "expo": {
     "name": "Gym80 Tracker",
     "slug": "gym80-tracker",
-    "version": "1.4.3",
+    "version": "1.4.4",
     "orientation": "portrait",
     "plugins": [
       [

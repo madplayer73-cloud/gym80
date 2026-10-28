@@ -22,7 +22,7 @@ const { getWorkoutElapsed, transitionWorkoutClock, formatWorkoutTime } = require
 const { getRememberedAccessory } = require('../src/utils/exerciseMemory.ts');
 const { getBodyWeight, getProgressSummary, isPersonalData } = require('../src/utils/personalData.ts');
 const { isBodyMeasurement, isBodyMeasurementDue, bodyMetrics } = require('../src/utils/bodyMeasurements.ts');
-const { parseScaleScreenshotText, mergeScaleReadings, scaleScreenshotMetricKeys, scaleReadingRegions } = require('../src/utils/scaleScreenshotOcr.ts');
+const { parseScaleScreenshotText, mergeScaleReadings, scaleScreenshotMetricKeys, scaleReadingRegions, scaleNumericRegions } = require('../src/utils/scaleScreenshotOcr.ts');
 const { estimateSessionCalories, estimateWorkoutCalories } = require('../src/utils/calories.ts');
 const { parseMachineDrafts } = require('../src/utils/machineDraft.ts');
 const { applySetTarget } = require('../src/utils/setTargets.ts');
@@ -117,6 +117,16 @@ test('score verification includes wide digits and scales with screenshot resolut
     assert.ok(rectangle.left+rectangle.width > 345*scale);
     assert.ok(rectangle.top+rectangle.height >= 365*scale);
   }
+});
+
+test('numeric verification crops misrecognized age glyphs without guessing their value', () => {
+  const text='Vek3óVek:';
+  const symbols=[...text].map((text,index)=>({text,bbox:{x0:100+index*10,x1:109+index*10,y0:200,y1:220}}));
+  const regions=scaleNumericRegions([{text,bbox:{x0:100,x1:190,y0:200,y1:220},words:[{text,symbols}]}]);
+  assert.equal(regions.length,1);
+  assert.equal(regions[0].key,'bodyAge');
+  assert.deepEqual(regions[0].rectangle,{left:126,top:196,width:27,height:28});
+  assert.equal(parseScaleScreenshotText(text).bodyAge,undefined);
 });
 
 test('progression requires different days at the same weight, and respects a long break', () => {
