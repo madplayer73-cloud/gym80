@@ -1321,7 +1321,7 @@ function AppShell() {
             <Text style={styles.headerSubtitle}>{getTabLabel(activeTab)}</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>1.4.2</Text>
+            <Text style={styles.headerBadgeText}>1.4.3</Text>
           </View>
         </View>
       ) : null}
