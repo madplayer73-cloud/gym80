@@ -1,0 +1,9 @@
+# Emergency rollback: use the retained 1.5.0 image, never remove the data mount.
+services:
+  gym80-web:
+    image: gym80-tracker:1.5.0
+    container_name: gym80-tracker
+    restart: unless-stopped
+    ports: ["8088:80"]
+    volumes:
+      - ./zima-data/sync:/data

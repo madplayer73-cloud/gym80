@@ -1,0 +1,54 @@
+# Isolated acceptance environment. Contains only synthetic data.
+services:
+  test-app:
+    build:
+      context: .
+      dockerfile: sleep/Test.Dockerfile
+    image: gym80-sleep-test:1.6.0
+    container_name: gym80-sleep-test
+    restart: "no"
+    stop_grace_period: 40s
+    volumes:
+      - test-data:/data
+    logging: &logs
+      driver: json-file
+      options: {max-size: "2m", max-file: "2"}
+  sleep-proxy:
+    build:
+      context: .
+      dockerfile: sleep/Dockerfile
+    image: gym80-sleep:1.6.0
+    container_name: gym80-sleep-test-proxy
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: ["192.168.1.140:18088:8080"]
+    environment:
+      ROLE: proxy
+      IDLE_TIMEOUT: 900s
+      TARGET: http://test-app:80
+      CONTROLLER: http://sleep-agent:8080
+    networks: [default, control]
+    volumes: [test-state:/state]
+    logging: *logs
+  sleep-agent:
+    build:
+      context: .
+      dockerfile: sleep/Dockerfile
+    image: gym80-sleep:1.6.0
+    container_name: gym80-sleep-test-agent
+    restart: unless-stopped
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment: {ROLE: agent, CONTAINER: gym80-sleep-test}
+    networks: [control]
+    volumes: [/var/run/docker.sock:/var/run/docker.sock:ro]
+    logging: *logs
+networks:
+  control: {internal: true}
+volumes:
+  test-data:
+  test-state:

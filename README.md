@@ -100,6 +100,12 @@ Service worker neukladá tréningy, merania, API odpovede ani aplikačné balík
 
 Overenie: `npm run test:pwa` a `npm run build:web`.
 
+## Uspávanie na CasaOS (1.6.0)
+
+Po 15 minútach nečinnosti môže Gym80 zastaviť webový kontajner a pri otvorení ho automaticky prebudiť. HTTPS adresa aj port 8088 zostávajú rovnaké; port vlastní stále dostupná proxy. Ovládanie je v menu **Úsporný režim · spánok aplikácie** alebo na `/__sleep/ui`.
+
+Architektúra, ochrana dát, oprávnenia oddeleného Docker agenta, izolovaný testovací Compose a rollback sú v [sleep/README.md](sleep/README.md). Nasadenie agenta s Docker socketom vyžaduje výslovné schválenie. Testovacie dáta sú oddelené od histórie Gym80. Automatický spánok neznamená offline prevádzku.
+
 ## Dalsie kroky
 
 1. Pridat realnu navigaciu a formular pre zapis treningu.

@@ -8,3 +8,5 @@ web-build
 zima-data
 vehicle-damage-reporting-app
 npm-debug.log*
+.codex-remote-attachments
+.test-artifacts

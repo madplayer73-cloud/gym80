@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { AppColors, useTheme } from "../theme";
 import { triggerTapHaptic } from "../utils/haptics";
 
@@ -31,6 +31,17 @@ export function SideMenu({
   const { colors, mode, setMode } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [clearStep, setClearStep] = React.useState(0);
+  const [hasSleepControl, setHasSleepControl] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isOpen || Platform.OS !== "web") return;
+    let cancelled = false;
+    fetch("/__sleep", { cache: "no-store", signal: AbortSignal.timeout(3000) })
+      .then(response => response.ok ? response.json() : null)
+      .then(status => { if (!cancelled) setHasSleepControl(typeof status?.autosleep === "boolean"); })
+      .catch(() => { if (!cancelled) setHasSleepControl(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   React.useEffect(() => {
     if (!isOpen) {
@@ -130,6 +141,12 @@ export function SideMenu({
               </Pressable>
             )}
           </View>
+
+          {hasSleepControl ? (
+            <Pressable accessibilityRole="button" onPress={() => window.open("/__sleep/ui", "_blank", "noopener,noreferrer")} style={styles.cloudButton}>
+              <Text style={styles.cloudButtonText}>Úsporný režim · spánok aplikácie</Text>
+            </Pressable>
+          ) : null}
 
           <View style={styles.dangerBox}>
             <Text style={styles.dangerTitle}>Bezpecnost dat</Text>

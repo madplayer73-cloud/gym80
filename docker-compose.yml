@@ -5,10 +5,60 @@ services:
       args:
         EXPO_PUBLIC_CLOUD_AUTH: "pocketbase-single"
         EXPO_PUBLIC_POCKETBASE_URL: "/pb"
-    image: gym80-tracker:1.5.0
+    image: gym80-tracker:1.6.0
     container_name: gym80-tracker
-    restart: unless-stopped
-    ports:
-      - "8088:80"
+    # Wake proxy is always on; the app is allowed to remain stopped after reboot.
+    restart: "no"
+    stop_grace_period: 40s
+    logging: &logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - ./zima-data/sync:/data
+  sleep-proxy:
+    build:
+      context: .
+      dockerfile: sleep/Dockerfile
+    image: gym80-sleep:1.6.0
+    container_name: gym80-sleep-proxy
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "8088:8080"
+    environment:
+      ROLE: proxy
+      IDLE_TIMEOUT: 900s
+      TARGET: http://gym80-web:80
+      CONTROLLER: http://sleep-agent:8080
+    networks: [default, sleep-control]
+    volumes:
+      - sleep-state:/state
+    logging: *logs
+  sleep-agent:
+    build:
+      context: .
+      dockerfile: sleep/Dockerfile
+    image: gym80-sleep:1.6.0
+    container_name: gym80-sleep-agent
+    restart: unless-stopped
+    # Only this isolated process has the socket; no ports or app/data volumes.
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      ROLE: agent
+      CONTAINER: gym80-tracker
+    networks: [sleep-control]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging: *logs
+networks:
+  sleep-control:
+    internal: true
+volumes:
+  sleep-state:

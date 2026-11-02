@@ -1,5 +1,5 @@
 const http = require("http");
-const { mkdir, readFile, stat, writeFile } = require("fs/promises");
+const { mkdir, open, readFile, rename, stat } = require("fs/promises");
 const path = require("path");
 
 const PORT = Number(process.env.PORT || 80);
@@ -7,6 +7,10 @@ const STATIC_DIR = process.env.STATIC_DIR || "/app/public";
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const DATA_FILE = path.join(DATA_DIR, "gym80.json");
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
+let writeQueue = Promise.resolve();
+let pendingWrites = 0;
+let activeRequests = 0;
+let stopping = false;
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -94,14 +98,27 @@ async function readSnapshot() {
   }
 }
 
-async function writeSnapshot(snapshot) {
+function writeSnapshot(snapshot) {
+  pendingWrites++;
+  const operation = writeQueue.then(() => persistSnapshot(snapshot));
+  writeQueue = operation.catch(() => {}).finally(() => { pendingWrites--; });
+  return operation;
+}
+
+async function persistSnapshot(snapshot) {
   await mkdir(DATA_DIR, { recursive: true });
   const nextSnapshot = {
     ...snapshot,
     updatedAt: snapshot.updatedAt || new Date().toISOString()
   };
 
-  await writeFile(DATA_FILE, JSON.stringify(nextSnapshot, null, 2), "utf8");
+  const temporary = `${DATA_FILE}.tmp`;
+  const file = await open(temporary, "w", 0o600);
+  try {
+    await file.writeFile(JSON.stringify(nextSnapshot, null, 2), "utf8");
+    await file.sync();
+  } finally { await file.close(); }
+  await rename(temporary, DATA_FILE);
   return nextSnapshot;
 }
 
@@ -152,6 +169,11 @@ async function handleSyncRequest(request, response) {
 }
 
 const server = http.createServer(async (request, response) => {
+  if (request.url === "/health/ready" || request.url === "/health/live") {
+    sendJson(response, stopping ? 503 : 200, { ok: !stopping, busy: activeRequests + pendingWrites });
+    return;
+  }
+  activeRequests++;
   try {
     if ((request.url || "").startsWith("/sync/")) {
       await handleSyncRequest(request, response);
@@ -160,10 +182,22 @@ const server = http.createServer(async (request, response) => {
 
     await serveStatic(request, response);
   } catch (error) {
-    console.error(error);
+    console.error("Gym80 request failed", error && error.code || "request-error");
     sendJson(response, 500, { message: "CasaOS server zlyhal." });
+  } finally {
+    activeRequests--;
   }
 });
+
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.once(signal, () => {
+    stopping = true;
+    // Finish active requests and fsync/rename writes before exiting. Docker
+    // allows 40 s; no immediate process.exit during a file write.
+    server.close(async () => { await writeQueue; process.exit(0); });
+    server.closeIdleConnections();
+  });
+}
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Gym80 app server bezi na porte ${PORT}`);
