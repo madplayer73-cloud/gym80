@@ -215,6 +215,26 @@ func TestAgentHasExactAllowlistAndSanitizesInspect(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+func TestExternalNavigation(t *testing.T) {
+	x := makeRig(t)
+	for _, tc := range []struct{method, path, mode, dest string; code int}{
+		{"GET", "/", "navigate", "document", 200},
+		{"GET", "/", "cors", "empty", 403},
+		{"GET", "/sync/gym80", "navigate", "document", 403},
+		{"POST", "/__sleep/sleep", "navigate", "document", 403},
+		{"GET", "/", "navigate", "iframe", 403},
+	} {
+		r := httptest.NewRequest(tc.method, "http://localhost"+tc.path, nil)
+		r.RemoteAddr = "100.107.191.11:42"
+		r.Header.Set("Sec-Fetch-Site", "cross-site")
+		r.Header.Set("Sec-Fetch-Mode", tc.mode)
+		r.Header.Set("Sec-Fetch-Dest", tc.dest)
+		w := httptest.NewRecorder()
+		x.p.ServeHTTP(w, r)
+		if w.Code != tc.code { t.Fatalf("%+v: %d", tc, w.Code) }
+	}
+}
+
 func TestAccessAndCsrf(t *testing.T) {
 	x := makeRig(t)
 	for _, ip := range []string{"8.8.8.8:42", "bad"} {

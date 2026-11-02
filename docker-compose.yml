@@ -21,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: sleep/Dockerfile
-    image: gym80-sleep:1.6.0
+    image: gym80-sleep:1.6.0-navigation-fix
     container_name: gym80-sleep-proxy
     restart: unless-stopped
     read_only: true

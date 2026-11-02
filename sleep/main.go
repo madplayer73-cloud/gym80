@@ -330,7 +330,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		jsonReply(w, 403, nil)
 		return
 	}
-	if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+	if r.Header.Get("Sec-Fetch-Site") == "cross-site" && !(r.Method == "GET" && r.URL.Path == "/" && r.Header.Get("Sec-Fetch-Mode") == "navigate" && r.Header.Get("Sec-Fetch-Dest") == "document") {
 		jsonReply(w, 403, nil)
 		return
 	}
