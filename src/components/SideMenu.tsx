@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AppColors, useTheme } from "../theme";
 import { triggerTapHaptic } from "../utils/haptics";
 
@@ -59,6 +59,7 @@ export function SideMenu({
       <View style={styles.backdrop}>
         <Pressable style={styles.backdropPress} onPress={onClose} />
         <View style={styles.panel}>
+          <ScrollView contentContainerStyle={styles.panelContent}>
           <Text style={styles.title}>Menu</Text>
           <Text style={styles.subtitle}>Zobrazenie aplikacie</Text>
 
@@ -199,6 +200,7 @@ export function SideMenu({
           >
             <Text style={styles.closeText}>Zavriet</Text>
           </Pressable>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -217,12 +219,14 @@ function createStyles(colors: AppColors) {
     },
     panel: {
       width: 280,
+      backgroundColor: colors.surface,
+      borderLeftWidth: 1,
+      borderLeftColor: colors.border
+    },
+    panelContent: {
       paddingTop: 62,
       paddingHorizontal: 18,
       paddingBottom: 24,
-      backgroundColor: colors.surface,
-      borderLeftWidth: 1,
-      borderLeftColor: colors.border,
       gap: 16
     },
     title: {
